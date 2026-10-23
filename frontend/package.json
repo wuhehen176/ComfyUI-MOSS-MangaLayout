@@ -1,0 +1,1 @@
+{"name":"comfyui-moss-manga-layout-ui","private":true,"type":"module","scripts":{"build":"node build.mjs"},"dependencies":{"vue":"^3.5.35"},"devDependencies":{"vite":"^7.3.3","@vitejs/plugin-vue":"^6.0.7","typescript":"^5.7.0","vitest":"^4.1.10","vue-tsc":"^3.3.3"}}

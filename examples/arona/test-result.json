@@ -1,0 +1,23 @@
+{
+  "variant": "full-color backgrounds",
+  "promptId": "00e8f31b-4911-4489-9d1b-e2be87efe54d",
+  "status": "success",
+  "size": [
+    1664,
+    2496
+  ],
+  "executionSeconds": 98.18,
+  "seed": 2026102302,
+  "layoutId": "arona_wave_cutout",
+  "compilerNodeId": "50",
+  "snapshotVerified": true,
+  "geometryUnchanged": true,
+  "backgroundColorObserved": {
+    "topWaves": "blue and aqua",
+    "street": "cream buildings and warm paving, natural skin colors",
+    "shop": "warm wooden counter, cream shelves and tan apron",
+    "bottomWaves": "blue and aqua"
+  },
+  "foregroundCutoutPreserved": true,
+  "output": "result.png"
+}

@@ -1,0 +1,32 @@
+{
+  "promptId": "4bd39306-1cc4-46b1-a802-b27ec7cce9fa",
+  "status": "success",
+  "size": [
+    1664,
+    2496
+  ],
+  "executionSeconds": 93.14,
+  "seed": 2026102303,
+  "layoutId": "toki_furcloak_cutout",
+  "framePurposeCount": 16,
+  "compilerNodeId": "50",
+  "compilerSnapshotVerified": true,
+  "libraryEntries": [
+    "arona_wave_cutout",
+    "toki_furcloak_cutout"
+  ],
+  "originalAronaLayoutPreserved": true,
+  "observations": {
+    "backgroundSections": 4,
+    "continuousRightForegroundFigure": true,
+    "dialogueCompleteAndOrdered": true,
+    "finalExpressionSoftSmile": true,
+    "fullyColoredBackgrounds": true,
+    "differences": [
+      "Lower-left portrait frame expands behind the foreground figure rather than staying narrow.",
+      "Cape is shorter than in the reference.",
+      "Foreground torso angle is more frontal than the requested three-quarter view."
+    ]
+  },
+  "sourceReference": "https://www.alter-web.jp/products/578/"
+}

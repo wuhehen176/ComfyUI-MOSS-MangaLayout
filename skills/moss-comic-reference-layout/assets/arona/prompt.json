@@ -1,0 +1,116 @@
+{
+  "summary": {
+    "canvas": "multi_panel",
+    "caption": "A finished full-color Japanese anime comic page with clean expressive lineart, soft cel shading and bright natural colors throughout every character and background. Aqua and sky-blue wave panels have white foam; the street has warm cream buildings and beige paving; the shop has warm wooden counters and amber tea. Supporting people have natural skin and clothing colors. Every background panel is fully colored, without grayscale or selective-color treatment. Four background panels occupy three horizontal rows: a wide wave-pattern panel at the top, a street vignette on the middle left, a shop vignette on the middle right, and a wide wave-pattern panel at the bottom. One much larger unframed Arona figure floats in the foreground across the entire page, continuously overlapping the background panel borders. The large figure is a single coherent cutout illustration, not an additional panel; the background borders disappear only behind her silhouette. Two explicitly described small Arona appearances are narrative vignettes, not extra large foreground copies. Chinese narration is printed; only the Japanese sound effect is hand-lettered.",
+    "palette": [
+      "sky blue",
+      "aqua waves",
+      "white foam",
+      "cream buildings",
+      "beige paving",
+      "warm wood",
+      "natural skin tones"
+    ]
+  },
+  "layout": "arona_wave_cutout",
+  "items": [
+    {
+      "panel": 1,
+      "slot": "C",
+      "label": "object",
+      "caption": "panel 1, energetic aqua and sky-blue waves with bright white foam, translucent blue bubbles and sunlit rippling contours, fully colored with soft cel shading. This is the top background window behind the large foreground figure, not another scene with a separate large person."
+    },
+    {
+      "panel": 2,
+      "slot": "C",
+      "label": "object",
+      "caption": "panel 2, a small quiet street vignette, warm beige paving, a cream-colored facade, muted green storefront accents and soft daylight, all fully colored, its right portion partly hidden behind the central foreground cutout. Keep the far-left area readable."
+    },
+    {
+      "panel": 2,
+      "slot": "L",
+      "label": "character",
+      "caption": "panel 2, one friendly adult passerby in a plain collared shirt, waist-up, smiling with palms lightly together in greeting, looking down toward the small Arona beside him. Natural warm skin tones, a pale beige shirt and subtle blue-gray clothing shadows; a supporting figure."
+    },
+    {
+      "panel": 2,
+      "slot": "S",
+      "label": "character",
+      "tags": [
+        "arona (blue archive)"
+      ],
+      "caption": "panel 2, a small waist-up view of arona (blue archive), short pale-blue bobbed hair with a small side ponytail and dark hair ribbon, a small geometric halo above her head, wearing her opaque white and pale-blue hooded jacket over a blue-and-white sailor-style dress, opaque white knee socks and blue flat shoes. Her pale-blue hair, blue eyes, blue-and-white clothing and natural skin tones are fully colored. She smiles with eyes gently curved and turns her head toward the friendly passerby on the left. This small narrative appearance remains separate from the large foreground cutout."
+    },
+    {
+      "panel": 3,
+      "slot": "C",
+      "label": "object",
+      "caption": "panel 3, a small street-corner shop counter and simple shelves, viewed at eye level, with one plain paper cup of tea being passed across the counter. Warm brown wooden countertop, cream shelves, amber tea and soft daylight, fully colored beneath delicate lineart, without readable brands or shop signs."
+    },
+    {
+      "panel": 3,
+      "slot": "L",
+      "label": "character",
+      "tags": [
+        "arona (blue archive)"
+      ],
+      "caption": "panel 3, a small waist-up view of arona (blue archive), short pale-blue bobbed hair with a small side ponytail and dark hair ribbon, a small geometric halo above her head, wearing her opaque white and pale-blue hooded jacket over a blue-and-white sailor-style dress, opaque white knee socks and blue flat shoes. Her pale-blue hair, blue eyes, blue-and-white clothing and natural skin tones are fully colored. She faces the shopkeeper on the right, smiles warmly with a slight downward nod, and cups both hands around the same single paper cup offered by the shopkeeper. Clothing stays complete; lower body cropped outside this vignette."
+    },
+    {
+      "panel": 3,
+      "slot": "R",
+      "label": "character",
+      "caption": "panel 3, one friendly adult shopkeeper with natural warm skin tones, a cream shirt and a tan apron, waist-up behind the counter, smiling gently toward small Arona on the left. His right hand supports the far side of the same single paper cup while she receives it. Their hands belong to their respective people; no second cup."
+    },
+    {
+      "panel": 4,
+      "slot": "C",
+      "label": "object",
+      "caption": "panel 4, fully colored pale-aqua waves, translucent sky-blue ripples and bright white foam echoing the top background, leaving open space around the lower-right narration box. The continuous legs and shoes of the one large foreground Arona may overlap this window; do not draw another independent figure here."
+    },
+    {
+      "panel": 1,
+      "slot": "S",
+      "label": "character",
+      "tags": [
+        "arona (blue archive)"
+      ],
+      "caption": "panel 1, the single dominant full-body foreground cutout of arona (blue archive), short pale-blue bobbed hair with a small side ponytail and dark hair ribbon, a small geometric halo above her head, wearing her opaque white and pale-blue hooded jacket over a blue-and-white sailor-style dress, opaque white knee socks and blue flat shoes. Keep her pale-blue hair, blue eyes, blue-and-white outfit and warm skin tones fully colored, retaining the recognizable hair silhouette, sailor collar, hood and halo. Joyfully jumping in midair, both eyes closed in happy arcs, cheeks slightly raised, mouth open in a broad carefree laugh. Her anatomical right arm extends toward the upper left with a relaxed open hand; her anatomical left arm bends above her head toward the upper right. Her torso leans slightly diagonally, both knees bend backward in the jump, with one knee lower than the other; both shoes remain proportional. The loose jacket and dress hem flutter around the fully covered body; skirt layers remain closed and no underwear is visible. Her complete body stays one continuous silhouette from head to shoes. This is the large page-wide foreground illustration belonging to the top panel: it intentionally breaks that panel border and crosses in front of the two middle vignettes and the upper edge of the bottom wave panel, occluding only the lines behind her silhouette. No rectangular border around this figure, no extra foreground copy, no cutting the body at panel gutters. Keep the far-left and far-right vignette faces and all narration boxes visible."
+    },
+    {
+      "panel": 1,
+      "slot": "TL",
+      "label": "text",
+      "text": "像汹涌的浪潮一样。",
+      "caption": "panel 1, a rectangular white narration box with a thin black border at the upper left, clear horizontal printed Chinese lettering in black, medium glyphs; keep clear of the large foreground head and extended arm."
+    },
+    {
+      "panel": 1,
+      "slot": "T",
+      "label": "text",
+      "text": "ザパーン",
+      "caption": "panel 1, large Japanese handwritten sound effect across the top wave pattern, bold flowing black strokes, no speech bubble; do not cover the foreground face or halo."
+    },
+    {
+      "panel": 2,
+      "slot": "TL",
+      "label": "text",
+      "text": "路上遇见的人，也会被她感染。",
+      "caption": "panel 2, a rectangular white narration box at the upper left beside the small street scene, fine black border, horizontal printed Chinese lettering, medium glyphs, no tail."
+    },
+    {
+      "panel": 3,
+      "slot": "TR",
+      "label": "text",
+      "text": "街角的小店，总会请她喝茶。",
+      "caption": "panel 3, a rectangular white narration box at the upper right above the shop vignette, fine black border, horizontal printed Chinese lettering, medium glyphs; keep both small faces visible."
+    },
+    {
+      "panel": 4,
+      "slot": "BR",
+      "label": "text",
+      "text": "她仿佛拥有一种不可思议的活力，让所有目光都追随她。",
+      "caption": "panel 4, a rectangular white narration box at the lower right, fine black border, horizontal printed Chinese lettering, small but clearly legible glyphs in naturally wrapped lines. The box sits beside the foreground shoes, without covering them."
+    }
+  ]
+}
