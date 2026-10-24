@@ -1,7 +1,7 @@
 import { MANGA_TABLE } from '@/manga/table';
-import type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel } from '@/manga/table';
+import type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel, ManualContent } from '@/manga/table';
 
-export type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel };
+export type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel, ManualContent };
 
 /**
  * 漫画 Layout 模式的持久化设置。
@@ -35,6 +35,8 @@ export interface MangaSettings {
 /** 设置页可管理的一条版式;两个方向可以各自缺省。 */
 export interface MangaCustomLayout {
   id: string;
+  promptMode?: 'llm' | 'manual';
+  promptCaption?: string;
   label?: string;
   /** 选择引导：这套版式适合什么节拍，拼进提示词清单。 */
   usage?: string;
@@ -108,6 +110,8 @@ export function resolveLayouts(manga: MangaSettings, orientation: MangaOrientati
       usage: override?.usage?.trim() || def.usage,
       readingOrder: override?.readingOrder?.trim() || def.readingOrder,
       panels: override?.[orientation]?.length ? override[orientation]! : def.panels.map(withBottomTextSlots),
+      promptMode: override?.promptMode,
+      promptCaption: override?.promptCaption,
     });
   }
   for (const entry of pending.values()) {
@@ -120,6 +124,8 @@ export function resolveLayouts(manga: MangaSettings, orientation: MangaOrientati
       usage: entry.usage?.trim(),
       readingOrder: entry.readingOrder?.trim() || '',
       panels,
+      promptMode: entry.promptMode,
+      promptCaption: entry.promptCaption,
     });
   }
   const disabled = new Set([...manga.disabled, ...(manga.deleted ?? [])]);
@@ -490,7 +496,14 @@ function normalizePanels(raw: unknown): MangaPanel[] | undefined {
         if (slots[slot] && typeof value === 'string' && value.trim()) slotNotes[slot] = value.trim();
       }
     }
-    if (Object.keys(slots).length) out.push({ position, slots, ...(Number.isSafeInteger(panel.layer) ? { layer:panel.layer } : {}), ...(Object.keys(shapes).length ? { shapes } : {}), ...(Object.keys(slotNotes).length ? { slotNotes } : {}) });
+    const slotContents: Record<string, ManualContent[]> = {};
+    if (panel.slotContents && typeof panel.slotContents === 'object' && !Array.isArray(panel.slotContents)) {
+      for (const [key, value] of Object.entries(panel.slotContents)) {
+        const slot = key.trim().toUpperCase();
+        if (slots[slot] && Array.isArray(value)) slotContents[slot] = JSON.parse(JSON.stringify(value));
+      }
+    }
+    if (Object.keys(slots).length) out.push({ position, slots, ...(Number.isSafeInteger(panel.layer) ? { layer:panel.layer } : {}), ...(Object.keys(shapes).length ? { shapes } : {}), ...(Object.keys(slotNotes).length ? { slotNotes } : {}), ...(Object.keys(slotContents).length ? { slotContents } : {}) });
   }
   return out.length ? out : undefined;
 }
@@ -508,7 +521,7 @@ function normalizeCustom(raw: unknown): MangaCustomLayout | null {
   // 只改用途或名称、不动坐标的覆盖条目也合法：panels 会回落到内置表
   if (!portrait && !landscape && !label && !usage && !readingOrder) return null;
   const canvas = normalizeCanvas(entry.canvas);
-  return { id, label, usage, readingOrder, portrait, landscape, ...(canvas ? { canvas } : {}) };
+  return { id, label, usage, readingOrder, portrait, landscape, ...(canvas ? { canvas } : {}), ...(entry.promptMode ? { promptMode:entry.promptMode } : {}), ...(typeof entry.promptCaption === 'string' ? { promptCaption:entry.promptCaption } : {}) };
 }
 
 export function normalizeCanvas(raw: unknown): { width: number; height: number } | null {

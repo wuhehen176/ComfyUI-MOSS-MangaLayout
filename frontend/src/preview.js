@@ -1,9 +1,9 @@
 export function formatEntry(value) {
-  const {id,label,usage,readingOrder,canvas}=value;
+  const {id,label,usage,readingOrder,canvas,promptMode,promptCaption}=value;
   if(!canvas||!id)throw new Error('版式缺少 id 或 canvas。');
   const panels=value.panels??value.portrait??value.landscape;
   if(!Array.isArray(panels)||!panels.length)throw new Error('版式缺少分格。');
-  return {id,label:label||id,usage:usage||'',readingOrder:readingOrder||'',canvas,panels};
+  return {id,label:label||id,usage:usage||'',readingOrder:readingOrder||'',canvas,panels,...(promptMode?{promptMode}:{}),...(typeof promptCaption==='string'?{promptCaption}:{})};
 }
 export function exportEntries(value) {
   const entries=Array.isArray(value)?value:value.layouts??[value];

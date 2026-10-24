@@ -49,6 +49,13 @@
 - S 等内容槽可在画布内超出所属 F；跨格示例用这种方式。内容槽不另计格，遮挡仍靠描述而非硬蒙版。
 - 外框重叠时 layer 影响遮挡，不替代读序。当前编辑器没有专用可配置 X 槽；编译器保留的 legacy X 扩框能力不是可视化控件，本流程优先编辑实际 S、E 等区域。
 - slotNotes 只使用该格实际槽位键，F 存整格用途。用途跟随库和快照，不直接进入编译后的正向 JSON。
+- 新增分格只有 F；需要的内框单独添加。已有版式保存、重载时保留原槽位，不自动补回删除项。
+
+## 可选的手填模式
+
+参考图反推仍可交付上述版式和独立内容 JSON。用户要在编辑器直接填写时，版式根对象可增加 `promptMode:"manual"`、`promptCaption`（整页描述）；每格的 `slotContents` 按实际槽位键保存内容数组。每项含 `label`（object/character/text）和字符串 `caption`，文字项另填准确 `text`，可选 `textType` 为 dialogue/narration/sfx。空白条目仅为草稿；框用途仍独立保存在 slotNotes。
+
+节点选择 manual 模式时从这些字段生成内容，不使用输入框中的旧 LLM 内容。llm 模式的输入框兼容普通整页描述及 Layout JSON；参考图任务若需逐项定位，继续使用带 panel/slot 的 JSON。
 
 ## 内容对象
 
@@ -64,6 +71,8 @@
 
 复制安装目录 `examples/单节点编译检查.json` 的已知普通工作流，再替换内容、ID 和完整快照。核对当前 node definition，不把 API 请求包装当普通 UI 工作流。
 
-当前 MossMangaLayout 的 widgets_values 顺序为：内容 JSON 字符串、layout_id、完整 layout_snapshot JSON 字符串、bleed 数值。
+当前 MossMangaLayout 的 widgets_values 顺序为：内容字符串、layout_id、完整 layout_snapshot JSON 字符串、bleed 数值、library_mode（llm/manual，默认 llm）。新增控件追加在末尾，旧四项顺序保持兼容；实际保存前仍核对当前节点定义。
+
+LLM 用途库和直接提示词库分别保存，同名 ID 可以独立存在。每套版式一个 JSON，index.json 只记录顺序与文件名；旧 layouts.json 首次读取时迁移并保留备份。工作流继续使用完整快照，不依赖库中文件名。
 
 输出 layout_prompt、width、height 接文本编码器 text 与潜空间尺寸。旧工作流从快照还原，公共库之后改名、删除或改几何都不自动覆盖它。

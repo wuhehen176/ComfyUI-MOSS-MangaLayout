@@ -32,6 +32,10 @@ def validate_layout(raw):
         raise ValueError('版式需要非空 id。')
     layout = copy.deepcopy(raw)
     layout['id'] = layout['id'].strip()
+    if layout.get('promptMode', 'llm') not in ('llm', 'manual'):
+        raise ValueError('提示词模式需要 llm 或 manual。')
+    if 'promptCaption' in layout and not isinstance(layout['promptCaption'], str):
+        raise ValueError('整页画面描述需要字符串。')
     canvas = layout.get('canvas', {})
     if not isinstance(canvas, dict) or any(not integer(canvas.get(k)) or not 64 <= canvas[k] <= 8192 or canvas[k] % 2 for k in ('width', 'height')):
         raise ValueError('画布宽高需要是 64～8192 的偶数。')
@@ -69,7 +73,60 @@ def validate_layout(raw):
             panel['slotNotes'] = notes
         else:
             panel.pop('slotNotes', None)
+        contents = panel.get('slotContents', {})
+        if not isinstance(contents, dict):
+            raise ValueError(f'第 {index+1} 格的手填内容需要对象。')
+        normalized_contents = {}
+        for key, entries in contents.items():
+            slot = key.strip().upper() if isinstance(key, str) else ''
+            if slot not in slots or slot in normalized_contents or not isinstance(entries, list):
+                raise ValueError(f'第 {index+1} 格手填内容的槽位无效：{key}。')
+            for entry in entries:
+                if not isinstance(entry, dict) or entry.get('label') not in ('object', 'character', 'text') or not isinstance(entry.get('caption'), str):
+                    raise ValueError(f'第 {index+1} 格的 {slot} 内容需要类型和字符串画面描述。')
+                if 'text' in entry and not isinstance(entry['text'], str):
+                    raise ValueError('准确台词需要字符串。')
+                if entry.get('textType', 'dialogue') not in ('dialogue', 'narration', 'sfx'):
+                    raise ValueError('文字类型需要 dialogue、narration 或 sfx。')
+            normalized_contents[slot] = entries
+        if normalized_contents:
+            panel['slotContents'] = normalized_contents
+        else:
+            panel.pop('slotContents', None)
     return layout
+
+
+def manual_source(layout):
+    """Build only from the independent content fields; purposes remain metadata."""
+    layout = validate_layout(layout)
+    items = []
+    for index, panel in enumerate(layout['panels']):
+        panel_items = []
+        for slot, entries in panel.get('slotContents', {}).items():
+            for entry in entries:
+                caption, text = entry['caption'].strip(), entry.get('text', '')
+                if entry['label'] == 'text':
+                    if not text.strip():
+                        if caption:
+                            raise ValueError(f'第 {index+1} 格的 {slot} 已填写文字说明，请同时填写准确台词。')
+                        continue
+                    kind = entry.get('textType', 'dialogue')
+                    if kind == 'sfx':
+                        caption = (caption or 'Sound effect beside its sound source.') + ' Japanese handwritten sound effect, legible black lettering.'
+                    else:
+                        size = 'large' if sum(c.isalnum() for c in text) <= 5 else 'medium' if sum(c.isalnum() for c in text) <= 15 else 'small'
+                        default = 'Narration in a white rectangular box with a thin black outline, printed black lettering.' if kind == 'narration' else 'An oval speech bubble, printed black lettering.'
+                        caption = (caption or default) + f' Chinese lettering, reproduce the supplied text verbatim, {size} legible glyphs.'
+                    panel_items.append({'panel':index+1, 'slot':slot, 'label':'text', 'caption':caption, 'text':text})
+                elif caption:
+                    panel_items.append({'panel':index+1, 'slot':slot, 'label':entry['label'], 'caption':caption})
+        # Match the visual text path; preserve the list order inside one region.
+        panel_items.sort(key=lambda item: ({'object':0, 'character':1, 'text':2}[item['label']], *(panel['slots'][item['slot']][:2] if item['label'] == 'text' else (0, 0))))
+        items.extend(panel_items)
+    if not items:
+        raise ValueError('直接提示词模式尚未填写画面或台词。请在编辑器第二页为外框／内框添加内容。')
+    caption = layout.get('promptCaption', '').strip() or 'A full-color Japanese 2D comic page, clean lineart and soft cel shading.'
+    return dumps({'summary':{'canvas':'single' if len(layout['panels']) == 1 else 'multi_panel', 'caption':caption}, 'items':items})
 
 
 def panel_index(layout, ref):
@@ -101,7 +158,7 @@ def frame_position(box, canvas):
     return f'full-height {horizontal}' if full_height else f'full-width {vertical}' if full_width else f'{vertical}-{horizontal}'
 
 
-def page_guide(layout):
+def page_guide(layout, has_text=False):
     panels, frames, relations = layout['panels'], [], []
     for i, panel in enumerate(panels):
         box = panel['slots'].get('F', panel['slots'].get('C'))
@@ -121,17 +178,23 @@ def page_guide(layout):
     lines.extend([
         'Reading sequence: '+' then '.join(f'panel {i+1}' for i in range(len(panels)))+'; stacking does not change this sequence.',
         'Each item belongs to its named panel; its bbox is a content region, not another comic frame. Only explicitly described border overlaps may extend outside that panel. Panel references and layout instructions are not visible lettering.',
-        'Create speech bubbles only for supplied dialogue items, never for unused text regions or silent people. Bubbles may overlap secondary clothing or body areas when necessary; keep faces, key hand gestures, contact points and important props unobscured.',
     ])
+    if has_text:
+        lines.append('Visible lettering follows the supplied text items and their assigned regions. Preserve each item\'s exact wording and described container. Text placement can overlap secondary clothing while keeping faces, key hand gestures, contact points and important props clearly visible.')
     return ' '.join(lines)
 
 
 def compile_layout(layout_json, layout, bleed=72):
     layout = validate_layout(layout)
+    if not isinstance(layout_json, str) or not layout_json.strip():
+        raise ValueError('请输入整页画面提示词，或含 summary/items 的 Layout JSON。')
+    text = layout_json.strip()
+    if not text.startswith(('{', '[', '```')):
+        return page_guide(layout)+'\n\n'+layout_json
     try:
-        root = json.loads(layout_json, parse_constant=reject_constant)
+        root = json.loads(text, parse_constant=reject_constant)
     except (ValueError, TypeError) as error:
-        raise ValueError('输入需要可解析的单页 Layout JSON，不含代码围栏或酒馆外层包装。') from error
+        raise ValueError('输入已识别为 Layout JSON，但格式无法解析；请检查引号、换行和括号，并去掉代码围栏及外层包装。') from error
     if not isinstance(root, dict) or not isinstance(root.get('summary'), dict) or not isinstance(root['summary'].get('caption'), str) or not root['summary']['caption'].strip():
         raise ValueError('输入需要 summary.caption 和 items；请使用“复制格式转换说明”。')
     if not isinstance(root.get('items'), list) or not root['items']:
@@ -160,8 +223,9 @@ def compile_layout(layout_json, layout, bleed=72):
         item['bbox'] = list(box)
         caption = re.sub(r'^\s*panel\s+\d+\s*[,;:]\s*', '', item['caption'], flags=re.I)
         item['caption'] = f'Content of panel {index+1}: {caption}'.strip()
-        if item['label'] == 'text' and slot in TEXT_REGIONS:
-            item['caption'] += f' Placement: {TEXT_REGIONS[slot]} text region.'
+        if item['label'] == 'text':
+            if slot in TEXT_REGIONS:
+                item['caption'] += f' Placement: {TEXT_REGIONS[slot]} text region.'
             group = groups.setdefault((index, slot), {'box':box, 'items':[], 'shaped':slot in panel.get('shapes', {})})
             group['items'].append(item)
         shape = panel.get('shapes', {}).get(slot)
@@ -185,7 +249,7 @@ def compile_layout(layout_json, layout, bleed=72):
             item['bbox'] = [math.floor(top+index*(height+gap)+.5), left, math.floor(top+index*(height+gap)+height+.5), right]
             item['caption'] += f' Text {index+1} of {count} in this region, read from top to bottom.'
     root.pop('layout', None)
-    root['summary']['caption'] = page_guide(layout)+' '+root['summary']['caption']
+    root['summary']['caption'] = page_guide(layout, any(item['label'] == 'text' for item in root['items']))+' '+root['summary']['caption']
     root['bbox_coord_space'], root['bbox_format'] = 'abs_centralized', 'yxyx'
     return dumps(root)
 
@@ -195,7 +259,6 @@ def format_instructions(layout):
     slots = '\n'.join(f'{i+1}: '+ ' '.join(panel['slots']) + (' X' if 'F' in panel['slots'] else '') for i, panel in enumerate(layout['panels']))
     return f'''只转换输出格式，保留现有描述、风格和准确文字字样，不增加或改写画面内容。
 每次直接输出一个单页 JSON 对象，不含 Markdown、代码围栏或说明文字。
-去掉酒馆 images、changes、tag、nl、size 等外层包装；若原内容在 tag 字符串中，输出其解析后的 JSON 对象，不再套字符串。
 根字段使用 summary 和 items；summary.caption 是非空字符串，已有的 meta、canvas、palette 按原值保留。
 items 是非空数组；每项含 panel、slot、label、caption。panel 是从 1 起的整数；slot 必须来自下列对应格的清单。
 label 只能为 object、character 或 text；caption 是非空字符串。text 项另有非空 text 字符串，非文字项不加入 text。

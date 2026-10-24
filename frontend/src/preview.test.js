@@ -10,6 +10,15 @@ describe('standalone library import',()=>{
   it('rejects missing geometry',()=>{
     expect(()=>formatEntry({id:'empty'})).toThrow();
   });
+  it('keeps both editing pages and handwritten contents in exports without leaking them into LLM purposes',()=>{
+    const manual={...layout,promptMode:'manual',promptCaption:'A bright office.',panels:[{...layout.panels[0],slotNotes:{F:'用途'},slotContents:{F:[{label:'character',caption:'A woman in a navy jacket.'}]}}]};
+    expect(exportEntries([manual])[0]).toEqual(formatEntry(manual));
+    expect(formatEntry(manual).promptMode).toBe('manual');
+    expect(formatEntry(manual).promptCaption).toBe('A bright office.');
+    expect(formatEntry(manual).panels[0].slotContents).toEqual(manual.panels[0].slotContents);
+    expect(purposeInstructions(manual)).toContain('用途');
+    expect(purposeInstructions(manual)).not.toContain('navy jacket');
+  });
   it('copies per-frame purposes from the selected snapshot without coordinates or visible lettering',()=>{
     const selected={...layout,usage:'开场',panels:[{...layout.panels[0],slotNotes:{F:'介绍环境与人物关系'}}]};
     const note=purposeInstructions(selected);

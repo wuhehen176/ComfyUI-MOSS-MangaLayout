@@ -6,6 +6,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,108 @@ def item(panel=1, slot='S', **extra):
 
 
 class LayoutChecks(unittest.TestCase):
+    def test_plain_prompt_and_json_are_detected_without_changing_manual_mode(self):
+        layout=copy.deepcopy(SEEDS[0]);before=copy.deepcopy(layout)
+        plain='A full-color comic in a quiet office.\n第一格：成年人在桌边递出文件；第二格：对方点头。'
+        result=node().compile(plain,layout['id'],core.dumps(layout))['result']
+        self.assertTrue(result[0].endswith(plain))
+        self.assertIn(f'exactly {len(layout["panels"])} distinct comic panels',result[0])
+        self.assertIn('outer frame yxyx',result[0]);self.assertIn('Reading sequence:',result[0])
+        self.assertNotIn('Visible lettering follows',result[0])
+        self.assertEqual(result[1:],(1664,2496));self.assertEqual(layout,before)
+        structured=json.loads(core.compile_layout(source(item(slot='F')),layout))
+        self.assertEqual(structured['items'][0]['bbox'],layout['panels'][0]['slots']['F'])
+        for invalid in ('', '   ', '{"summary":', '[{"caption":"wrong root"}]', '```json\n{}\n```'):
+            with self.assertRaises(ValueError):core.compile_layout(invalid,layout)
+        layout['promptMode']='manual'
+        layout['panels'][0]['slotContents']={'F':[{'label':'object','caption':'An empty office.'}]}
+        manual=node().compile(plain,layout['id'],core.dumps(layout))['result'][0]
+        self.assertIn('An empty office.',manual);self.assertNotIn('第一格：成年人',manual)
+
+    def test_library_migrates_to_individual_files_and_two_libraries_keep_same_ids_independent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            legacy=Path(directory)/'layouts.json'
+            legacy.write_text(json.dumps(SEEDS),encoding='utf-8')
+            llm=store.LayoutLibrary(legacy)
+            manual=store.LayoutLibrary(Path(directory)/'manual_layouts.json')
+            initial=llm.read()
+            self.assertEqual(len(initial['layouts']),len(SEEDS))
+            self.assertEqual(json.loads(legacy.read_text(encoding='utf-8')),SEEDS)
+            self.assertEqual(len(list(llm.directory.glob('layout-*.json'))),len(SEEDS))
+            self.assertEqual(len(json.loads(llm.index.read_text())['files']),len(SEEDS))
+            self.assertTrue(all(isinstance(json.loads(path.read_text(encoding='utf-8')),dict) for path in llm.directory.glob('layout-*.json')))
+            self.assertEqual(manual.read()['layouts'],[])
+            direct=copy.deepcopy(SEEDS[0]);direct['promptMode']='manual';direct['promptCaption']='Independent manual page.'
+            manual.save([direct],manual.read()['revision'])
+            self.assertEqual(llm.get(direct['id']).get('promptMode','llm'),'llm')
+            self.assertEqual(manual.get(direct['id'])['promptMode'],'manual')
+            old_libraries=node.libraries
+            try:
+                node.libraries={'llm':llm,'manual':manual}
+                self.assertEqual(node.selected(direct['id'],'','manual')['promptCaption'],'Independent manual page.')
+                self.assertNotIn('promptCaption',node.selected(direct['id'],'','llm'))
+            finally:node.libraries=old_libraries
+            llm.save([],initial['revision'])
+            self.assertEqual(list(llm.directory.glob('layout-*.json')),[])
+            self.assertEqual(llm.read()['layouts'],[])
+            self.assertEqual(len(manual.read()['layouts']),1)
+
+    def test_individual_file_save_keeps_old_library_when_index_commit_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            library=store.LayoutLibrary(Path(directory)/'layouts.json')
+            initial=library.read();library.save([SEEDS[0]],initial['revision'])
+            previous=library.read();files=library._files()
+            changed=copy.deepcopy(SEEDS[0]);changed['label']='Changed'
+            replace=store.os.replace
+            def failing_replace(source,destination):
+                if Path(destination)==library.index:raise OSError('Simulated index failure')
+                return replace(source,destination)
+            with patch.object(store.os,'replace',side_effect=failing_replace):
+                with self.assertRaises(OSError):library.save([changed],previous['revision'])
+            self.assertEqual(library.read(),previous)
+            self.assertEqual(library._files(),files)
+            self.assertEqual(len(list(library.directory.glob('layout-*.json'))),1)
+
+    def test_manual_mode_compiles_f_only_panels_and_keeps_llm_input_independent(self):
+        layout={'id':'manual','canvas':{'width':1024,'height':1024},'promptMode':'manual','promptCaption':'An office in soft daylight.','usage':'LLM用途','panels':[
+            {'position':'one','slots':{'F':[-500,-500,-20,500]},'slotNotes':{'F':'开场格'},'slotContents':{'F':[{'label':'object','caption':'A wooden desk.'},{'label':'character','caption':'An adult woman holding a folder.'}]}},
+            {'position':'two','slots':{'F':[20,-500,500,500]},'slotContents':{'F':[{'label':'object','caption':'The folder on the same desk.'},{'label':'text','caption':'','text':'资料齐了。'},{'label':'text','caption':'','text':'好的。'}]}},
+        ]}
+        snapshot=core.dumps(layout)
+        result=node().compile('This is retained as a separate LLM input.',layout['id'],snapshot)['result']
+        compiled=json.loads(result[0]);self.assertEqual(result[1:],(1024,1024))
+        self.assertEqual(len(compiled['items']),5)
+        self.assertEqual(compiled['items'][0]['bbox'],layout['panels'][0]['slots']['F'])
+        first,second=compiled['items'][-2:]
+        self.assertEqual([first['text'],second['text']],['资料齐了。','好的。'])
+        self.assertLess(first['bbox'][2],second['bbox'][0])
+        self.assertIn('large legible glyphs',first['caption'])
+        self.assertNotIn('LLM用途',result[0]);self.assertNotIn('开场格',result[0]);self.assertNotIn('slotContents',result[0])
+        llm=copy.deepcopy(layout);llm['promptMode']='llm'
+        self.assertEqual(len(json.loads(node().compile(source(item(slot='F')),llm['id'],core.dumps(llm))['result'][0])['items']),1)
+        self.assertEqual(json.loads(snapshot),layout)
+
+    def test_manual_empty_drafts_language_fonts_and_invalid_contents(self):
+        layout={'id':'manual','canvas':{'width':1024,'height':1024},'promptMode':'manual','panels':[{'position':'one','slots':{'F':[-500,-500,500,500]},'slotContents':{'F':[{'label':'object','caption':''}]}}]}
+        with self.assertRaisesRegex(ValueError,'尚未填写'):core.manual_source(layout)
+        entries=[{'label':'text','caption':'','text':'请看最后一页。'},{'label':'text','caption':'Narration.','text':'这份清单我已经逐项核对过了，你看一下。','textType':'narration'},{'label':'text','caption':'','text':'ドン','textType':'sfx'}]
+        layout['panels'][0]['slotContents']['F']=entries
+        generated=json.loads(core.manual_source(layout));self.assertEqual([item['text'] for item in generated['items']],[item['text'] for item in entries])
+        self.assertIn('medium legible glyphs',generated['items'][0]['caption']);self.assertIn('small legible glyphs',generated['items'][1]['caption'])
+        self.assertIn('Japanese handwritten sound effect',generated['items'][2]['caption'])
+        for bad in ({'MISSING':entries},{'F':'wrong'},{'F':[{'label':'wrong','caption':''}]}):
+            changed=copy.deepcopy(layout);changed['panels'][0]['slotContents']=bad
+            with self.assertRaises(ValueError):core.validate_layout(changed)
+        layout['panels'][0]['slotContents']['F']=[{'label':'text','caption':'Speech.','text':''}]
+        with self.assertRaisesRegex(ValueError,'准确台词'):core.manual_source(layout)
+        layout['panels'][0]['slotContents']['F']=[{'label':'object','caption':'A quiet empty room.'}]
+        output=core.compile_layout(core.manual_source(layout),layout)
+        self.assertNotIn('speech bubble',output.lower());self.assertNotIn('Visible lettering',output)
+        with tempfile.TemporaryDirectory() as directory:
+            library=store.LayoutLibrary(Path(directory)/'layouts.json')
+            library.save([layout],library.read()['revision'])
+            self.assertEqual(library.get(layout['id'])['panels'][0]['slotContents'],layout['panels'][0]['slotContents'])
+
     def test_frame_notes_survive_library_and_snapshot_but_do_not_become_image_content(self):
         layout=copy.deepcopy(SEEDS[0])
         layout['panels'][0]['slotNotes']={' f ':'  交代场景  ','S':'主体反应','DELETED':'已删除','T':23}

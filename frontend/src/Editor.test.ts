@@ -6,27 +6,86 @@ import { quadPoints } from '@/manga/editor';
 // 在 Vue 活跃组件中执行实际 setup/指针处理器；画布只替换测量与捕获接口。
 function editor(props: Record<string,unknown> = {}) {
   let state: any;
+  const events: any[][] = [];
   const renderer = createRenderer<any, any>({
     createElement:()=>({}), createText:()=>({}), createComment:()=>({}),
     setText:()=>{}, setElementText:()=>{}, patchProp:()=>{}, insert:()=>{}, remove:()=>{},
     parentNode:()=>null, nextSibling:()=>null,
   });
   const app = renderer.createApp(defineComponent({ setup() {
-    state = (Editor as any).setup({ sources:[], existingIds:[], ...props }, { emit:()=>{}, expose:()=>{} });
+    state = (Editor as any).setup({ sources:[], existingIds:[], ...props }, { emit:(...args:any[])=>events.push(args), expose:()=>{} });
     return ()=>null;
   } }));
   app.provide(ssrContextKey, {});
   app.mount({});
   state.preset(1024,1024);
   state.add();
+  state.resetSlots();
   state.svg.value = {
     getBoundingClientRect:()=>({left:0,top:0,width:1024,height:1024}),
     setPointerCapture:()=>{}, hasPointerCapture:()=>false,
   };
-  return { state, close:()=>app.unmount() };
+  return { state, events, close:()=>app.unmount() };
 }
 
 describe('版式编辑器 Ctrl 角点交互',()=>{
+  it('跨模式另存可保留相同 ID，但目标库已存在时保护原条目',()=>{
+    const {state,events,close}=editor({initialMode:'llm',editingId:'page',existingIds:['page'],libraryIds:{llm:['page'],manual:[]}});
+    state.doc.value.id='page';state.changePromptMode('manual');state.save();
+    expect(events.at(-1)?.[0]).toBe('save');
+    expect(events.at(-1)?.[1].promptMode).toBe('manual');
+    close();
+    const other=editor({initialMode:'llm',editingId:'page',existingIds:['page'],libraryIds:{llm:['page'],manual:['page']}});
+    other.state.doc.value.id='page';other.state.changePromptMode('manual');other.state.save();
+    expect(other.events.some((event:any[])=>event[0]==='save')).toBe(false);
+    expect(other.state.error.value).toContain('目标版式库已有此 ID');
+    other.close();
+  });
+  it('新增分格只有外框，手动添加的内框可删除且撤销恢复',()=>{
+    const {state,events,close}=editor();
+    state.add();
+    expect(state.doc.value.panels[1].slots).toEqual({});
+    state.newSlot.value='TR'; state.addSlot();
+    expect(Object.keys(state.doc.value.panels[1].slots)).toEqual(['TR']);
+    state.changePromptMode('manual');state.addContent();
+    state.changeContent(0,'text',{target:{value:'请进。'}});
+    state.deleteSlot();
+    expect(state.doc.value.panels[1].slotContents.TR).toBeUndefined();
+    state.undo();
+    expect(state.doc.value.panels[1].slotContents.TR[0].text).toBe('请进。');
+    state.save();
+    const saved=events.findLast((event:any[])=>event[0]==='save')[1];
+    expect(Object.keys(saved.portrait?.[1].slots ?? saved.landscape?.[1].slots ?? [])).toEqual(['F','TR']);
+    close();
+  });
+
+  it('两页字段独立，内外框内容随保存、复制、缩放和读序移动保留',()=>{
+    const {state,events,close}=editor();
+    state.changeText('usage',{target:{value:'用于交接文件的场景'}});
+    state.changeSlotNote({target:{value:'交代场景与人物关系'}});
+    state.changePromptMode('manual');
+    state.changeText('promptCaption',{target:{value:'A full-color comic in warm daylight.'}});
+    state.addContent();state.changeContent(0,'caption',{target:{value:'An office with a wooden desk.'}});
+    state.selectSlot(0,'TR');state.addContent();state.changeContent(0,'text',{target:{value:'资料齐了。'}});state.confirmSlot();
+    state.changePromptMode('llm');
+    expect(state.doc.value.usage).toBe('用于交接文件的场景');
+    expect(state.doc.value.panels[0].slotNotes.F).toBe('交代场景与人物关系');
+    state.changePromptMode('manual');
+    state.duplicate();state.selectSlot(1,'TR');state.changeContent(0,'text',{target:{value:'好的。'}});state.confirmSlot();
+    expect(state.doc.value.panels[0].slotContents.TR[0].text).toBe('资料齐了。');
+    state.preset(1664,2496);state.reorder(-1);state.save();
+    const saved=events.findLast((event:any[])=>event[0]==='save')[1];
+    expect(saved).toMatchObject({promptMode:'manual',promptCaption:'A full-color comic in warm daylight.',usage:'用于交接文件的场景'});
+    expect(saved.portrait[0].slotContents.TR[0].text).toBe('好的。');
+    expect(saved.portrait[1].slotContents.TR[0].text).toBe('资料齐了。');
+    expect(saved.portrait[0].slotNotes.F).toBe('交代场景与人物关系');
+    const loaded=editor({editingId:saved.id,sources:[{...saved,key:'saved',panels:saved.portrait}]});
+    loaded.state.sourceKey.value='saved';loaded.state.loadSource();
+    expect(loaded.state.doc.value.promptMode).toBe('manual');
+    expect(loaded.state.doc.value.panels[1].slotContents.TR[0].text).toBe('资料齐了。');
+    loaded.close();close();
+  });
+
   it('内外框用途独立保存；取消恢复本次内框说明，确认保留，清空可撤销',()=>{
     const {state,close}=editor();
     const change=(value:string)=>state.changeSlotNote({target:{value}});
