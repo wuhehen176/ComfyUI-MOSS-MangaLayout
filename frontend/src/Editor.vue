@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ModalMask from '@/components/ModalMask.vue';
-import { canvasOf, normalizeCanvas, orientationOf, parseCustomLayout, sharedDescription, type MangaCustomLayout, type ResolvedLayout, type ManualContent } from '@/manga/layouts';
+import { canvasOf, normalizeCanvas, orientationOf, parseCustomLayout, sharedDescription, slotType, type MangaCustomLayout, type ResolvedLayout, type ManualContent } from '@/manga/layouts';
 import { clamp, deformCorner, editablePanel, fitRect, MIN_PANEL, panelRect, quadPoints, saveEditedPanel, setSlotRect, slotRect, snapRect, type EditablePanel, type PanelRect } from '@/manga/editor';
 
 const props = defineProps<{ sources: (ResolvedLayout & { key: string })[]; existingIds: string[]; initialKey?: string; editingId?: string; initialMode?: 'llm' | 'manual' }>();
@@ -31,7 +31,7 @@ const current = computed(() => doc.value.panels[selected.value]);
 const activeRect = computed(() => current.value ? selectedSlot.value && current.value.slots[selectedSlot.value] ? slotRect(current.value, selectedSlot.value) : current.value : null);
 const slotLabels: Record<string,string> = { C:'内区', S:'主体', T:'顶部文字', B:'底部文字', TL:'左上文字', TR:'右上文字', BL:'左下文字', BR:'右下文字', L:'左人物', R:'右人物', O:'道具/音效', ML:'左侧文字', MR:'右侧文字', E:'有限越线', X:'出框区' };
 const newSlot = ref('S');
-const availableSlots = computed(() => ['C','S','T','B','TL','TR','BL','BR','ML','MR','L','R','O'].filter(key => current.value && !current.value.slots[key]));
+const availableSlots = computed(() => current.value ? ['C','S','T','B','TL','TR','BL','BR','ML','MR','L','R','O'] : []);
 const slotToAdd = computed(() => availableSlots.value.includes(newSlot.value) ? newSlot.value : availableSlots.value[0] ?? '');
 const contentItems = computed(() => current.value?.slotContents?.[selectedSlot.value || 'F'] ?? []);
 const quickEdit = ref<{index: number; key: string} | null>(null);
@@ -68,9 +68,15 @@ function deleteSlot(): void {
   if (current.value && key) edit(() => { delete current.value!.slots[key]; delete current.value!.corners[key]; if (current.value!.slotNotes) delete current.value!.slotNotes[key]; if (current.value!.slotContents) delete current.value!.slotContents[key]; });
 }
 function addSlot(): void {
-  const key = slotToAdd.value;
-  if (!current.value || !key) return;
-  edit(() => { current.value!.slots[key] = {...editablePanel(current.value!, canvas.value).slots[key]}; });
+  const base = slotToAdd.value;
+  if (!current.value || !base) return;
+  let key=base, suffix=2;
+  while (current.value.slots[key]) key=`${base}_${suffix++}`;
+  edit(() => {
+    const panel=current.value!, template=slotRect(editablePanel(panel,canvas.value),base);
+    const offset=24*Object.keys(panel.slots).filter(key=>slotType(key)===base).length;
+    setSlotRect(panel,key,fitRect({...template,x:template.x+offset,y:template.y+offset},canvas.value,1));
+  });
   selectSlot(selected.value,key);
 }
 function resetSlots(): void {
@@ -172,7 +178,7 @@ function changePromptMode(mode: 'llm' | 'manual'): void {
 function addContent(): void {
   if (!current.value) return;
   const key=selectedSlot.value || 'F';
-  const label = ['T','B','TL','TR','BL','BR','ML','MR'].includes(key) ? 'text' : ['S','L','R'].includes(key) ? 'character' : 'object';
+  const label = ['T','B','TL','TR','BL','BR','ML','MR'].includes(slotType(key)) ? 'text' : ['S','L','R'].includes(slotType(key)) ? 'character' : 'object';
   edit(() => { ((current.value!.slotContents ??= {})[key] ??= []).push({label,caption:'',...(label==='text'?{text:'',textType:'dialogue' as const}:{})}); },true);
 }
 function changeContent(index: number, key: keyof ManualContent, event: Event): void {
@@ -369,7 +375,7 @@ onMounted(() => {
               <polygon :points="polygon(r,'F')" :fill="i===selected ? '#dcecff' : '#f1f2f4'" :stroke="i===selected ? '#2675cf' : '#333'" stroke-width="2" vector-effect="non-scaling-stroke" />
               <foreignObject v-if="previewDescription(r,'F')" :x="r.x+6" :y="r.y+doc.width*.04" :width="Math.max(1,r.width-12)" :height="Math.max(1,Math.min(r.height-doc.width*.04,doc.width*.055))" class="frame-description"><div :style="{fontSize:`${doc.width*.018}px`}" :title="frameDescription(r,'F')">{{ previewDescription(r,'F') }}</div></foreignObject>
               <g v-for="s in visibleSlots(r,i)" :key="s.key" class="slot" :data-slot="s.key" @pointerdown.stop="begin($event,i,'',s.key)" @dblclick.stop.prevent="openDescription(i,s.key)">
-                <polygon :points="polygon(r,s.key)" :fill="s.key==='T' ? '#e5ba6638' : '#50a18a18'" :stroke="i===selected && s.key===selectedSlot ? '#df7827' : s.key==='T' ? '#b48733' : '#50a18a'" :stroke-width="i===selected && s.key===selectedSlot ? 2 : 1" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" />
+                <polygon :points="polygon(r,s.key)" :fill="slotType(s.key)==='T' ? '#e5ba6638' : '#50a18a18'" :stroke="i===selected && s.key===selectedSlot ? '#df7827' : slotType(s.key)==='T' ? '#b48733' : '#50a18a'" :stroke-width="i===selected && s.key===selectedSlot ? 2 : 1" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" />
                 <text :x="s.rect.x+5" :y="s.rect.y+doc.width*.025" :font-size="doc.width*.021" fill="#575c62">{{ s.key }}</text>
                 <foreignObject v-if="previewDescription(r,s.key)" :x="s.rect.x+6" :y="s.rect.y+doc.width*.032" :width="Math.max(1,s.rect.width-12)" :height="Math.max(1,Math.min(s.rect.height-doc.width*.032,doc.width*.055))" class="frame-description"><div :style="{fontSize:`${doc.width*.018}px`}" :title="frameDescription(r,s.key)">{{ previewDescription(r,s.key) }}</div></foreignObject>
               </g>
@@ -390,7 +396,7 @@ onMounted(() => {
           <label>名称<input :value="doc.label" aria-label="版式名称" @change="changeText('label',$event)" /></label>
           <label>画面描述<textarea :value="doc.description" aria-label="整页画面描述" rows="3" placeholder="全页共用的画风、环境与光照；两种模式共用" @input="changeText('description',$event)"></textarea></label>
           <template v-if="current">
-            <strong>第 {{ selected+1 }} 格 · {{ selectedSlot ? `${selectedSlot} ${slotLabels[selectedSlot] ?? '槽位'}` : '外框 F' }}</strong>
+            <strong>第 {{ selected+1 }} 格 · {{ selectedSlot ? `${selectedSlot} ${slotLabels[slotType(selectedSlot)] ?? '槽位'}` : '外框 F' }}</strong>
             <div v-if="selectedSlot" class="slot-actions">
               <div class="inline"><button type="button" class="primary" @click="confirmSlot">确定内框</button><button type="button" @click="cancelSlot">取消内框修改</button></div>
             </div>
@@ -414,7 +420,7 @@ onMounted(() => {
               <button type="button" @click="addContent">＋ 添加画面／台词</button>
               <p class="hint">一个框可添加多个人物或多条文字，按列表顺序输出。空白条目留作草稿；每句台词单独一项，人物与气泡可用独立内框定位。</p>
             </div>
-            <div class="slot-list"><button type="button" :class="{active:!selectedSlot}" @click="confirmSlot">外框 F</button><button v-for="(_,key) in current.slots" :key="key" type="button" :class="{active:selectedSlot===key}" @click="selectSlot(selected,String(key))">{{ key }} {{ slotLabels[key] ?? '' }}</button></div>
+            <div class="slot-list"><button type="button" :class="{active:!selectedSlot}" @click="confirmSlot">外框 F</button><button v-for="(_,key) in current.slots" :key="key" type="button" :class="{active:selectedSlot===key}" @click="selectSlot(selected,String(key))">{{ key }} {{ slotLabels[slotType(String(key))] ?? '' }}</button></div>
             <label v-for="field in (['x','y','width','height'] as const)" :key="field">{{ {x:'左边距',y:'上边距',width:'宽度',height:'高度'}[field] }}<input :value="activeRect?.[field]" :aria-label="`${selectedSlot ? '槽位' : '分格'}${field}`" type="number" step="1" @change="changeRect(field,$event)" /></label>
           </template>
           <p v-else class="hint">添加或选择一格，编辑精确尺寸。</p>

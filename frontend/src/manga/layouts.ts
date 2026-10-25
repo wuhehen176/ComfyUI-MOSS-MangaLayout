@@ -3,6 +3,9 @@ import type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel, ManualCont
 
 export type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel, ManualContent };
 
+/** Numbered instances keep the base slot's role while using independent coordinates. */
+export function slotType(key: string): string { return key.replace(/_[1-9]\d*$/, ''); }
+
 /**
  * 漫画 Layout 模式的持久化设置。
  *

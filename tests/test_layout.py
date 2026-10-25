@@ -28,6 +28,22 @@ def item(panel=1, slot='S', **extra):
 
 
 class LayoutChecks(unittest.TestCase):
+    def test_numbered_slots_keep_coordinates_roles_text_and_library_data_independent(self):
+        layout={'id':'repeated','canvas':{'width':1024,'height':1024},'panels':[{'position':'one','slots':{'F':[-400,-400,400,400],'S':[-250,-300,250,-20],'S_2':[-450,10,300,450],'TL':[-380,-380,-280,-100],'TL_2':[-240,-380,-40,-100]},'slotNotes':{'S_2':'An adult colleague at the right.'}}]}
+        given=[item(slot='S_2'),item(slot='TL',label='text',caption='First.',text='第一句。'),item(slot='TL_2',label='text',caption='Next.',text='第二句。'),item(slot='TL_2',label='text',caption='Last.',text='第三句。')]
+        output=json.loads(core.compile_layout(source(*given),layout));a,b,c,d=output['items']
+        self.assertEqual(a['bbox'],layout['panels'][0]['slots']['S_2'])
+        self.assertEqual(b['bbox'],layout['panels'][0]['slots']['TL'])
+        self.assertLess(c['bbox'][2],d['bbox'][0]);self.assertEqual(c['bbox'][1::2],[-380,-100])
+        self.assertEqual([x['text'] for x in output['items'][1:]],['第一句。','第二句。','第三句。'])
+        self.assertIn('upper-left text region',c['caption']);self.assertIn('S_2 is a continuous foreground subject',output['summary']['caption'])
+        self.assertEqual(json.loads(core.manual_source(layout))['items'][0]['label'],'character')
+        instructions=core.format_instructions(layout);self.assertIn('S_2 TL TL_2',instructions);self.assertIn('编号不表示读序或新增人物',instructions)
+        with self.assertRaisesRegex(ValueError,'没有 S_3'):core.compile_layout(source(item(slot='S_3')),layout)
+        with tempfile.TemporaryDirectory() as directory:
+            library=store.LayoutLibrary(Path(directory)/'layouts.json');library.save([layout],library.read()['revision'])
+            self.assertEqual(library.get('repeated')['panels'],layout['panels'])
+
     def test_cross_panel_s_and_shared_descriptions_compile_without_text(self):
         layout={'id':'shared','description':'A full-color quiet office.','promptMode':'manual','canvas':{'width':1024,'height':1024},'panels':[{'position':'one','slots':{'F':[-400,-400,400,400],'S':[-500,-500,480,480]},'slotNotes':{'S':'An adult holding a folder in the foreground.'}}]}
         output=json.loads(core.compile_layout(core.manual_source(layout),layout,bleed=0))

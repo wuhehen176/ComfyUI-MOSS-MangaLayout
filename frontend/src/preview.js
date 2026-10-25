@@ -1,4 +1,4 @@
-import {sharedDescription} from './manga/layouts';
+import {sharedDescription,slotType} from './manga/layouts';
 
 export function formatEntry(value) {
   const {id,label,usage,readingOrder,canvas,promptMode,promptCaption}=value;
@@ -37,7 +37,7 @@ export function renderPreview(canvas,layout,showSlots) {
     ctx.fillStyle='#eef4fd';ctx.fill();ctx.strokeStyle='#235c9e';ctx.lineWidth=2/scale;ctx.stroke();
     ctx.save();ctx.clip();
     if(showSlots) for(const [key,[y1,x1,y2,x2]] of Object.entries(panel.slots)) {
-      if(!['T','TL','TR','B','BL','BR','ML','MR'].includes(key))continue;
+      if(!['T','TL','TR','B','BL','BR','ML','MR'].includes(slotType(key)))continue;
       const shape=panel.shapes?.[key]??[[x1,y1],[x2,y1],[x2,y2],[x1,y2]];
       ctx.beginPath();shape.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();
       ctx.strokeStyle='#dd8838';ctx.lineWidth=1/scale;ctx.stroke();ctx.fillStyle='#a65313';ctx.font=`${10/scale}px sans-serif`;ctx.fillText(key,x1+2/scale,y1+12/scale);

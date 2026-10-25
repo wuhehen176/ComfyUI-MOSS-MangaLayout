@@ -7,6 +7,10 @@ import re
 TEXT_REGIONS = {'T':'upper', 'TL':'upper-left', 'TR':'upper-right', 'B':'lower', 'BL':'lower-left', 'BR':'lower-right', 'ML':'middle-left', 'MR':'middle-right'}
 
 
+def slot_type(key):
+    return re.sub(r'_[1-9]\d*$', '', key)
+
+
 def dumps(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
 
@@ -59,7 +63,7 @@ def validate_layout(raw):
         if not isinstance(slots, dict) or not slots:
             raise ValueError(f'第 {index+1} 格缺少槽位。')
         for key, box in slots.items():
-            if not isinstance(key, str) or not re.fullmatch(r'[A-Z]+', key) or not isinstance(box, list) or len(box) != 4 or not all(integer(n) for n in box):
+            if not isinstance(key, str) or not re.fullmatch(r'[A-Z]+(?:_[1-9]\d*)?', key) or not isinstance(box, list) or len(box) != 4 or not all(integer(n) for n in box):
                 raise ValueError(f'第 {index+1} 格槽位格式错误。')
             top, left, bottom, right = box
             if not (-canvas['height']/2 <= top < bottom <= canvas['height']/2 and -canvas['width']/2 <= left < right <= canvas['width']/2):
@@ -109,7 +113,7 @@ def manual_source(layout):
         for slot, note in panel.get('slotNotes', {}).items():
             entries = panel.get('slotContents', {}).get(slot, [])
             if note and not any(entry['label'] != 'text' and entry['caption'].strip() == note for entry in entries):
-                label = 'character' if slot in ('S', 'L', 'R', 'X') else 'object'
+                label = 'character' if slot_type(slot) in ('S', 'L', 'R', 'X') else 'object'
                 panel_items.append({'panel':index+1, 'slot':slot, 'label':label, 'caption':note})
         for slot, entries in panel.get('slotContents', {}).items():
             for entry in entries:
@@ -177,8 +181,9 @@ def page_guide(layout, has_text=False):
         if 'F' in panel.get('shapes', {}):
             line += '; clockwise corners xy ' + dumps(panel['shapes']['F'])
         if box:
-            for slot in ('S', 'L', 'R'):
-                region = panel['slots'].get(slot)
+            for slot, region in panel['slots'].items():
+                if slot_type(slot) not in ('S', 'L', 'R'):
+                    continue
                 if region and (region[0] < box[0] or region[1] < box[1] or region[2] > box[2] or region[3] > box[3]):
                     line += f'; {slot} is a continuous foreground subject region extending across the outer border, yxyx {dumps(region)}; keep its subject continuous across the crossed borders'
         frames.append(line)
@@ -240,8 +245,8 @@ def compile_layout(layout_json, layout, bleed=72):
         caption = re.sub(r'^\s*panel\s+\d+\s*[,;:]\s*', '', item['caption'], flags=re.I)
         item['caption'] = f'Content of panel {index+1}: {caption}'.strip()
         if item['label'] == 'text':
-            if slot in TEXT_REGIONS:
-                item['caption'] += f' Placement: {TEXT_REGIONS[slot]} text region.'
+            if slot_type(slot) in TEXT_REGIONS:
+                item['caption'] += f' Placement: {TEXT_REGIONS[slot_type(slot)]} text region.'
             group = groups.setdefault((index, slot), {'box':box, 'items':[], 'shaped':slot in panel.get('shapes', {})})
             group['items'].append(item)
         shape = panel.get('shapes', {}).get(slot)
@@ -277,6 +282,7 @@ def format_instructions(layout):
 每次直接输出一个单页 JSON 对象，不含 Markdown、代码围栏或说明文字。
 根字段使用 summary 和 items；summary.caption 是非空字符串，已有的 meta、canvas、palette 按原值保留。
 items 是非空数组；每项含 panel、slot、label、caption。panel 是从 1 起的整数；slot 必须来自下列对应格的清单。
+同类内框可有编号，例如 S、S_2 或 TL、TL_2；每个键对应独立区域，按清单完整填写，不能省略编号或自行创建未列出的键。编号不表示读序或新增人物。
 label 只能为 object、character 或 text；caption 是非空字符串。text 项另有非空 text 字符串，非文字项不加入 text。
 已有 tags、palette 按原值保留；tags、summary.meta 若存在，使用字符串数组。
 不输出 bbox、bbox_format、bbox_coord_space、width、height、layer 或 z-index，这些由节点处理。

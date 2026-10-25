@@ -29,6 +29,40 @@ function editor(props: Record<string,unknown> = {}) {
 }
 
 describe('版式编辑器 Ctrl 角点交互',()=>{
+  it('同类内框可重复添加，各自描述、内容、坐标与形变独立保存，删除可撤销',()=>{
+    const {state,events,close}=editor();
+    const original=JSON.stringify(state.doc.value.panels[0].slots.S);
+    state.newSlot.value='S';state.addSlot();expect(state.selectedSlot.value).toBe('S_2');
+    expect(state.availableSlots.value).toContain('S');
+    state.changeSlotNote({target:{value:'右侧的成年同事'}});
+    state.changeRect('x',{target:{value:500}});state.changePromptMode('manual');state.addContent();
+    expect(state.contentItems.value[0].label).toBe('character');
+    state.changeContent(0,'caption',{target:{value:'An adult colleague at the right.'}});
+    const second=JSON.stringify(state.doc.value.panels[0].slots.S_2);
+    const points=quadPoints(state.doc.value.panels[0],'S_2');
+    const event={button:0,pointerId:4,clientX:points[2][0],clientY:points[2][1],ctrlKey:true,altKey:false};
+    state.begin(event,0,'se','S_2');state.move({...event,clientX:event.clientX-30});state.end(event);
+    state.newSlot.value='S';state.addSlot();expect(state.selectedSlot.value).toBe('S_3');
+    expect(JSON.stringify(state.doc.value.panels[0].slots.S)).toBe(original);
+    expect(state.doc.value.panels[0].slots.S_2).toBeDefined();
+    state.newSlot.value='TL';state.addSlot();expect(state.selectedSlot.value).toBe('TL_2');
+    state.addContent();expect(state.contentItems.value[0].label).toBe('text');
+    state.changeContent(0,'text',{target:{value:'资料齐了。'}});state.confirmSlot();state.save();
+    const saved=events.at(-1)[1], panels=saved.portrait??saved.landscape;
+    expect(panels[0].slotNotes.S_2).toBe('右侧的成年同事');expect(panels[0].shapes.S_2).toHaveLength(4);
+    const loaded=editor({editingId:saved.id,sources:[{...saved,key:'saved',panels}]});
+    loaded.state.sourceKey.value='saved';loaded.state.loadSource();
+    expect(loaded.state.doc.value.panels[0].slotContents.TL_2[0].text).toBe('资料齐了。');
+    expect(loaded.state.doc.value.panels[0].slotNotes.S_2).toBe('右侧的成年同事');
+    loaded.state.selectSlot(0,'S_2');loaded.state.deleteSlot();
+    expect(loaded.state.doc.value.panels[0].slots.S_2).toBeUndefined();
+    expect(loaded.state.doc.value.panels[0].slots.S_3).toBeDefined();
+    loaded.state.undo();expect(JSON.stringify(loaded.state.doc.value.panels[0].slots.S_2)).toBe(second);
+    loaded.state.selectSlot(0,'S_2');loaded.state.deleteSlot();loaded.state.newSlot.value='S';loaded.state.addSlot();
+    expect(loaded.state.selectedSlot.value).toBe('S_2');
+    expect(loaded.state.doc.value.panels[0].slotNotes?.S_2).toBeUndefined();
+    loaded.close();close();
+  });
   it('普通点击不捕获指针，双击可编辑原框；实际拖动才捕获且可撤销',()=>{
     const {state,close}=editor();let captures=0;
     state.svg.value.setPointerCapture=()=>captures++;
