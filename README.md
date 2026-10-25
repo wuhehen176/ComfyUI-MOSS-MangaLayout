@@ -20,6 +20,10 @@
 
 可直接导入 [单节点编译检查工作流](examples/单节点编译检查.json) 查看界面和输入结构；该示例只运行编译，不采样生图。
 
+## 完整采样示例工作流
+
+[MOSS 漫画.json](examples/MOSS%20漫画.json) 包含模型加载、8／50 步分支切换、LoRA Manager、版式编译、文本编码、采样及保存链。导入后需选择本机模型和 LoRA，并填写画面内容；版式节点的提示词与宽高已接好。依赖、填写位置和原始参数差异见 [工作流说明](examples/MOSS漫画工作流说明.md)。
+
 ## 参考图示例模板
 
 - **阿罗娜·浪潮跨格前景**：[节点工作流](examples/arona/workflow.json)、[版式](examples/arona/layout.json)、[实测图](examples/arona/result.png)。四背景区域与整页跳跃人物，背景为彩色。

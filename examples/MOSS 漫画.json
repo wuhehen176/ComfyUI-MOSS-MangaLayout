@@ -1,0 +1,2015 @@
+{
+  "id": "3bfe6c24-dce0-4bf6-8ca2-9f5ab6606b09",
+  "revision": 3,
+  "last_node_id": 1590,
+  "last_link_id": 2707,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        20,
+        180
+      ],
+      "size": [
+        440,
+        150
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            3
+          ]
+        }
+      ],
+      "title": "① SFT主模型｜精度自动识别",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "UNETLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "unet_name": true,
+            "weight_dtype": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "moss_image_sft_int8_convrot.safetensors",
+        "default"
+      ],
+      "widgets_values_named": {
+        "unet_name": "moss_image_sft_int8_convrot.safetensors",
+        "weight_dtype": "default"
+      }
+    },
+    {
+      "id": 4,
+      "type": "CLIPTextEncode",
+      "pos": [
+        2459.8733466248746,
+        439.9153211886889
+      ],
+      "size": [
+        330,
+        220
+      ],
+      "flags": {},
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2695
+        },
+        {
+          "name": "text",
+          "type": "STRING",
+          "widget": {
+            "name": "text"
+          },
+          "link": 26
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            16
+          ]
+        }
+      ],
+      "title": "正向编码｜自动接收拼接结果",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "text": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_0f22fe2a-6821-4dcd-9628-11bfbfc1fbe4"
+      },
+      "widgets_values": [
+        ""
+      ],
+      "widgets_values_named": {
+        "text": ""
+      },
+      "color": "#232",
+      "bgcolor": "#353"
+    },
+    {
+      "id": 5,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1381.9943423984325,
+        1081.4443326555565
+      ],
+      "size": [
+        980,
+        270
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2696
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "slot_index": 0,
+          "links": [
+            17
+          ]
+        }
+      ],
+      "title": "负向提示词｜仅CFG分支生效",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "text": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_812003d1-e6e7-4122-8c10-00a0949f6b3e"
+      },
+      "widgets_values": [
+        "photorealistic, real photo, 3d render, cgi, sketch, rough sketch, construction lines, uncolored, unfinished, monochrome,\ngreyscale, black and white, screentone, halftone dots, flat vector art,\nthick black outline, oversaturated neon colors, harsh camera flash,\ngarbled text, gibberish characters, deformed glyphs, overlapping letters, stacked digits,\n, extra caption box, duplicate speech bubble, \nwatermark, signature, page number, logo, ui overlay,\nextra limbs, extra arms, extra legs, extra hands, three hands, extra fingers,\nfused fingers, mutated hands, fused bodies, conjoined bodies, duplicate character,\ntwo heads, floating hand, detached limb, bad anatomy, blurry, out of focus,\nlowres, jpeg artifacts, child, toddler, preteen, loli, childlike proportions,\noversized head, extra feet, duplicate feet, duplicate hands, multiple legs"
+      ],
+      "widgets_values_named": {
+        "text": "photorealistic, real photo, 3d render, cgi, sketch, rough sketch, construction lines, uncolored, unfinished, monochrome,\ngreyscale, black and white, screentone, halftone dots, flat vector art,\nthick black outline, oversaturated neon colors, harsh camera flash,\ngarbled text, gibberish characters, deformed glyphs, overlapping letters, stacked digits,\n, extra caption box, duplicate speech bubble, \nwatermark, signature, page number, logo, ui overlay,\nextra limbs, extra arms, extra legs, extra hands, three hands, extra fingers,\nfused fingers, mutated hands, fused bodies, conjoined bodies, duplicate character,\ntwo heads, floating hand, detached limb, bad anatomy, blurry, out of focus,\nlowres, jpeg artifacts, child, toddler, preteen, loli, childlike proportions,\noversized head, extra feet, duplicate feet, duplicate hands, multiple legs"
+      },
+      "color": "#223322",
+      "bgcolor": "#335533"
+    },
+    {
+      "id": 13,
+      "type": "SkipLayerGuidanceDiTSimple",
+      "pos": [
+        550,
+        520
+      ],
+      "size": [
+        330,
+        230
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            7
+          ]
+        }
+      ],
+      "title": "关闭分支｜官方负向跳层22",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "SkipLayerGuidanceDiTSimple",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "double_layers": true,
+            "single_layers": true,
+            "start_percent": true,
+            "end_percent": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "",
+        "22",
+        0,
+        1
+      ],
+      "widgets_values_named": {
+        "double_layers": "",
+        "single_layers": "22",
+        "start_percent": 0,
+        "end_percent": 1
+      }
+    },
+    {
+      "id": 15,
+      "type": "ModelSamplingAuraFlow",
+      "pos": [
+        543.9507159244796,
+        354.32091098036886
+      ],
+      "size": [
+        330,
+        100
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            4,
+            5
+          ]
+        }
+      ],
+      "title": "共用｜MOSS Flow shift 5",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "ModelSamplingAuraFlow",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "shift": true,
+            "sampling": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_ced4de36-8d8e-4ba2-8b31-ae714ad3256c"
+      },
+      "widgets_values": [
+        5,
+        "flow"
+      ],
+      "widgets_values_named": {
+        "shift": 5,
+        "sampling": "flow"
+      }
+    },
+    {
+      "id": 16,
+      "type": "KSampler",
+      "pos": [
+        2832.0293034973342,
+        172.02331822205602
+      ],
+      "size": [
+        330,
+        586
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2693
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 16
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 17
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 2706
+        },
+        {
+          "name": "steps",
+          "type": "INT",
+          "widget": {
+            "name": "steps"
+          },
+          "link": 19
+        },
+        {
+          "name": "cfg",
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": 20
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            21
+          ]
+        }
+      ],
+      "title": "采样器｜步数和CFG由开关控制",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "KSampler",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "seed": true,
+            "steps": true,
+            "cfg": true,
+            "sampler_name": true,
+            "scheduler": true,
+            "denoise": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_109cb9aa-54ef-4f81-83b8-6399713cd261"
+      },
+      "widgets_values": [
+        168499196914660,
+        "randomize",
+        8,
+        1,
+        "euler",
+        "sgm_uniform",
+        1
+      ],
+      "widgets_values_named": {
+        "seed": 168499196914660,
+        "control_after_generate": "randomize",
+        "steps": 8,
+        "cfg": 1,
+        "sampler_name": "euler",
+        "scheduler": "sgm_uniform",
+        "denoise": 1
+      }
+    },
+    {
+      "id": 17,
+      "type": "VAEDecode",
+      "pos": [
+        2467.292239758306,
+        740.221403417009
+      ],
+      "size": [
+        330,
+        110
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 21
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 22
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            23
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "VAEDecode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_83e6bf2f-da62-41a8-b250-6f499c36dbc0"
+      }
+    },
+    {
+      "id": 18,
+      "type": "SaveImage",
+      "pos": [
+        3230.199999999998,
+        246.8000549316407
+      ],
+      "size": [
+        660,
+        1100
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 23
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": []
+        }
+      ],
+      "title": "保存图片",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "SaveImage",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "filename_prefix": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_ce6d0a57-8e3c-4bf3-bdf2-75d6dba5c930"
+      },
+      "widgets_values": [
+        "MOSS-Image/SFT_8step_toggle"
+      ],
+      "widgets_values_named": {
+        "filename_prefix": "MOSS-Image/SFT_8step_toggle"
+      }
+    },
+    {
+      "id": 20,
+      "type": "PrimitiveBoolean",
+      "pos": [
+        550,
+        180
+      ],
+      "size": [
+        720,
+        100
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "BOOLEAN",
+          "type": "BOOLEAN",
+          "slot_index": 0,
+          "links": [
+            6,
+            9,
+            12
+          ]
+        }
+      ],
+      "title": "唯一开关｜开启=8步；关闭=50步",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "PrimitiveBoolean",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "value": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        true
+      ],
+      "widgets_values_named": {
+        "value": true
+      },
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 23,
+      "type": "PrimitiveInt",
+      "pos": [
+        524.9561733032807,
+        844.6876499650313
+      ],
+      "size": [
+        210,
+        105
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "slot_index": 0,
+          "links": [
+            10
+          ]
+        }
+      ],
+      "title": "关闭：50步",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "PrimitiveInt",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "value": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        50,
+        "fixed"
+      ],
+      "widgets_values_named": {
+        "value": 50,
+        "fixed": "fixed"
+      }
+    },
+    {
+      "id": 24,
+      "type": "PrimitiveInt",
+      "pos": [
+        754.3644007465606,
+        845.3130667632545
+      ],
+      "size": [
+        210,
+        105
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "INT",
+          "type": "INT",
+          "slot_index": 0,
+          "links": [
+            11
+          ]
+        }
+      ],
+      "title": "开启：8步",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "PrimitiveInt",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "value": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_fd367337-dbf7-4f1c-9e08-ed8e478206ed"
+      },
+      "widgets_values": [
+        8,
+        "fixed"
+      ],
+      "widgets_values_named": {
+        "value": 8,
+        "fixed": "fixed"
+      }
+    },
+    {
+      "id": 25,
+      "type": "PrimitiveFloat",
+      "pos": [
+        527.4663652272261,
+        1067.456047926012
+      ],
+      "size": [
+        210,
+        105
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "slot_index": 0,
+          "links": [
+            13
+          ]
+        }
+      ],
+      "title": "关闭：CFG 3",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "PrimitiveFloat",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "value": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_ee1d0370-3c4d-4a1a-8553-c512ef79ef27"
+      },
+      "widgets_values": [
+        3
+      ],
+      "widgets_values_named": {
+        "value": 3
+      }
+    },
+    {
+      "id": 26,
+      "type": "PrimitiveFloat",
+      "pos": [
+        752.323883095907,
+        1066.6444850207743
+      ],
+      "size": [
+        210,
+        105
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "FLOAT",
+          "type": "FLOAT",
+          "slot_index": 0,
+          "links": [
+            14
+          ]
+        }
+      ],
+      "title": "开启：CFG 1",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "PrimitiveFloat",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "value": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_68c5eb77-3b6c-401e-a45b-6f142e1bae07"
+      },
+      "widgets_values": [
+        1
+      ],
+      "widgets_values_named": {
+        "value": 1
+      }
+    },
+    {
+      "id": 22,
+      "type": "ComfySwitchNode",
+      "pos": [
+        905.6791325346513,
+        574.4447291736758
+      ],
+      "size": [
+        360,
+        150
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "shape": 7,
+          "type": "MODEL",
+          "link": 7
+        },
+        {
+          "name": "on_true",
+          "shape": 7,
+          "type": "MODEL",
+          "link": 8
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "switch"
+          },
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            2692
+          ]
+        }
+      ],
+      "title": "自动切换模型分支",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "ComfySwitchNode",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "switch": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_5ee985c7-7a75-43ce-945b-8d37abcb7f41"
+      },
+      "widgets_values": [
+        true
+      ],
+      "widgets_values_named": {
+        "switch": true
+      }
+    },
+    {
+      "id": 27,
+      "type": "ComfySwitchNode",
+      "pos": [
+        993.9492885320063,
+        849.5340770892305
+      ],
+      "size": [
+        294.7342235008566,
+        95.35885409107266
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "shape": 7,
+          "type": "INT",
+          "link": 10
+        },
+        {
+          "name": "on_true",
+          "shape": 7,
+          "type": "INT",
+          "link": 11
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "switch"
+          },
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "INT",
+          "slot_index": 0,
+          "links": [
+            19
+          ]
+        }
+      ],
+      "title": "自动切换步数",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "ComfySwitchNode",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "switch": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_465d45c5-1c37-460c-9180-419b8e24b1db"
+      },
+      "widgets_values": [
+        true
+      ],
+      "widgets_values_named": {
+        "switch": true
+      }
+    },
+    {
+      "id": 28,
+      "type": "ComfySwitchNode",
+      "pos": [
+        970.712214503933,
+        1076.2055039634342
+      ],
+      "size": [
+        301.56435805450747,
+        103.70691212284851
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "on_false",
+          "shape": 7,
+          "type": "FLOAT",
+          "link": 13
+        },
+        {
+          "name": "on_true",
+          "shape": 7,
+          "type": "FLOAT",
+          "link": 14
+        },
+        {
+          "name": "switch",
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "switch"
+          },
+          "link": 12
+        }
+      ],
+      "outputs": [
+        {
+          "name": "output",
+          "type": "FLOAT",
+          "slot_index": 0,
+          "links": [
+            20
+          ]
+        }
+      ],
+      "title": "自动切换CFG",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "ComfySwitchNode",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "switch": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        true
+      ],
+      "widgets_values_named": {
+        "switch": true
+      }
+    },
+    {
+      "id": 21,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        910.4713288077062,
+        336.9587282011291
+      ],
+      "size": [
+        360,
+        150
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "slot_index": 0,
+          "links": [
+            8
+          ]
+        }
+      ],
+      "title": "开启分支｜DMD latest，强度0.7",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "LoraLoaderModelOnly",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "lora_name": true,
+            "strength_model": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_1eca13b0-0c66-4a49-9bc5-a97e58df0874"
+      },
+      "widgets_values": [
+        "moss\\moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16.safetensors",
+        1
+      ],
+      "widgets_values_named": {
+        "lora_name": "moss\\moss_image_sft_4_steps_lora_v2_600_avg_rank_72_bf16.safetensors",
+        "strength_model": 1
+      },
+      "color": "#2a363b",
+      "bgcolor": "#3f5159"
+    },
+    {
+      "id": 30,
+      "type": "Note",
+      "pos": [
+        20,
+        790
+      ],
+      "size": [
+        440,
+        510
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "title": "使用说明",
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_64d9b11e-ff19-4590-b9eb-9bbb897efda4"
+      },
+      "widgets_values": [
+        "开关开启：社区DMD latest LoRA 0.7，8步 / CFG 1。\n开关关闭：原始SFT，50步 / CFG 3，负向跳层22。\n采样器Euler，sgm_uniform，shift 5；开关联动模型、步数和CFG。\n\nbest quality, highres来自官方Tag示例，并非必填或完整质量词表。\nLayout正文保持编译格式，画布尺寸与布局一致；质量词在JSON之外拼接。"
+      ],
+      "widgets_values_named": {
+        "text": "开关开启：社区DMD latest LoRA 0.7，8步 / CFG 1。\n开关关闭：原始SFT，50步 / CFG 3，负向跳层22。\n采样器Euler，sgm_uniform，shift 5；开关联动模型、步数和CFG。\n\nbest quality, highres来自官方Tag示例，并非必填或完整质量词表。\nLayout正文保持编译格式，画布尺寸与布局一致；质量词在JSON之外拼接。"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 31,
+      "type": "CLIPLoader",
+      "pos": [
+        10.715405085987806,
+        372.8592176886298
+      ],
+      "size": [
+        440,
+        170
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "slot_index": 0,
+          "links": [
+            2694
+          ]
+        }
+      ],
+      "title": "② 文本编码器｜Qwen3.5-9B",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.1",
+        "Node name for S&R": "CLIPLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "clip_name": true,
+            "type": true,
+            "device": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_e8cecc59-1742-40f6-87a7-f997eb7c6ca1"
+      },
+      "widgets_values": [
+        "qwen3.5_9b_int8_convrot.safetensors",
+        "moss_image",
+        "default"
+      ],
+      "widgets_values_named": {
+        "clip_name": "qwen3.5_9b_int8_convrot.safetensors",
+        "type": "moss_image",
+        "device": "default"
+      }
+    },
+    {
+      "id": 32,
+      "type": "VAELoader",
+      "pos": [
+        20,
+        600
+      ],
+      "size": [
+        440,
+        110
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "slot_index": 0,
+          "links": [
+            22
+          ]
+        }
+      ],
+      "title": "③ VAE｜FLUX.2 Small Decoder",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "VAELoader",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "vae_name": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "flux2-vae.safetensors"
+      ],
+      "widgets_values_named": {
+        "vae_name": "flux2-vae.safetensors"
+      }
+    },
+    {
+      "id": 40,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        2816.4739046627687,
+        842.6571590899354
+      ],
+      "size": [
+        360,
+        180
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "slot_index": 0,
+          "links": [
+            24
+          ]
+        }
+      ],
+      "title": "固定质量词｜  检测时不要把这块作为提示词输入端",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "PrimitiveStringMultiline",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "value": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_6435d2e9-1b4c-43ee-9bc5-1389aeafabf9"
+      },
+      "widgets_values": [
+        "best quality, highres"
+      ],
+      "widgets_values_named": {
+        "value": "best quality, highres"
+      },
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 42,
+      "type": "StringConcatenate",
+      "pos": [
+        2451.0737060992437,
+        191.0962372727078
+      ],
+      "size": [
+        330,
+        190
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "string_a",
+          "type": "STRING",
+          "widget": {
+            "name": "string_a"
+          },
+          "link": 24
+        },
+        {
+          "name": "string_b",
+          "type": "STRING",
+          "widget": {
+            "name": "string_b"
+          },
+          "link": 2707
+        },
+        {
+          "label": "分隔符",
+          "name": "delimiter",
+          "type": "STRING",
+          "widget": {
+            "name": "delimiter"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "slot_index": 0,
+          "links": [
+            26
+          ]
+        }
+      ],
+      "title": "固定质量词 + 主体提示词",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.36.0",
+        "Node name for S&R": "StringConcatenate",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "string_a": true,
+            "string_b": true,
+            "delimiter": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aaaliceControlHostId": "host_deb6f778-b55f-4601-a013-459b89f7d949"
+      },
+      "widgets_values": [
+        "",
+        "",
+        ", "
+      ],
+      "widgets_values_named": {
+        "string_a": "",
+        "string_b": "",
+        "delimiter": ", "
+      }
+    },
+    {
+      "id": 45,
+      "type": "Lora Loader (LoraManager)",
+      "pos": [
+        1343.8516046880452,
+        222.2243008156877
+      ],
+      "size": [
+        440,
+        680
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2692
+        },
+        {
+          "name": "clip",
+          "shape": 7,
+          "type": "CLIP",
+          "link": 2694
+        },
+        {
+          "name": "lora_stack",
+          "shape": 7,
+          "type": "LORA_STACK",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2693
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            2695,
+            2696
+          ]
+        },
+        {
+          "name": "trigger_words",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "loaded_loras",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "title": "Lora堆_1",
+      "properties": {
+        "cnr_id": "comfyui-lora-manager",
+        "ver": "0ec7eaf6060a14ef6d0bdf57b40e03371a281d4c",
+        "Node name for S&R": "Lora Loader (LoraManager)",
+        "ue_properties": {
+          "widget_ue_connectable": {
+            "text": true,
+            "loras": true
+          },
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "aux_id": "willmiao/ComfyUI-Lora-Manager",
+        "__lm_widget_ids": [
+          "__lm_autocomplete_meta_text",
+          "text",
+          "loras"
+        ],
+        "aaaliceControlHostId": "host_1e8585fc-d8a6-44ed-a336-179dda56eba8"
+      },
+      "widgets_values": [
+        {
+          "version": 1,
+          "textWidgetName": "text"
+        },
+        "<lora:BunnySlop_MOSS:1.00> <lora:MOSS-HOCF_000001925:1.00> <lora:kzmynon-moss-v1_comfyui:1.00> <lora:Nyalia_moss_v1_lokr:1.00> <lora:ba_style_moss_uma_v1_1000:1.00> <lora:@handwritten_speech_bubble_94255_moss_v0.0.0:1.00> <lora:@handwritten_speech_bubble_94255_moss_v0.0.0:1.00> <lora:fkey-lora-r4-muon-step6840-comfy:0.60> <lora:ChenbinStyleMossImage_v10MossImage:1.00> <lora:moss_pussy_lora_v1.0:0.80> <lora:moss_context_detaile_tweaker_20261018_rank2:0.40> <lora:realskin_r32_comfy:1.00> <lora:BunnySlop_MOSS:1.00> <lora:sb10:1.00>",
+        [
+          {
+            "name": "BunnySlop_MOSS",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "MOSS-HOCF_000001925",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "kzmynon-moss-v1_comfyui",
+            "strength": 1,
+            "active": true,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "Nyalia_moss_v1_lokr",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "ba_style_moss_uma_v1_1000",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": true,
+            "locked": false
+          },
+          {
+            "name": "@handwritten_speech_bubble_94255_moss_v0.0.0",
+            "strength": "1.00",
+            "active": false,
+            "expanded": false,
+            "clipStrength": "1.00",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "fkey-lora-r4-muon-step6840-comfy",
+            "strength": "0.60",
+            "active": false,
+            "expanded": false,
+            "clipStrength": "0.60",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "ChenbinStyleMossImage_v10MossImage",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "moss_pussy_lora_v1.0",
+            "strength": "0.80",
+            "active": false,
+            "expanded": false,
+            "clipStrength": "0.80",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "moss_context_detaile_tweaker_20261018_rank2",
+            "strength": "0.40",
+            "active": true,
+            "expanded": false,
+            "clipStrength": "0.40",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "realskin_r32_comfy",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "sb10",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          }
+        ]
+      ],
+      "widgets_values_named": {
+        "__lm_autocomplete_meta_text": {
+          "version": 1,
+          "textWidgetName": "text"
+        },
+        "text": "<lora:BunnySlop_MOSS:1.00> <lora:MOSS-HOCF_000001925:1.00> <lora:kzmynon-moss-v1_comfyui:1.00> <lora:Nyalia_moss_v1_lokr:1.00> <lora:ba_style_moss_uma_v1_1000:1.00> <lora:@handwritten_speech_bubble_94255_moss_v0.0.0:1.00> <lora:@handwritten_speech_bubble_94255_moss_v0.0.0:1.00> <lora:fkey-lora-r4-muon-step6840-comfy:0.60> <lora:ChenbinStyleMossImage_v10MossImage:1.00> <lora:moss_pussy_lora_v1.0:0.80> <lora:moss_context_detaile_tweaker_20261018_rank2:0.40> <lora:realskin_r32_comfy:1.00> <lora:BunnySlop_MOSS:1.00> <lora:sb10:1.00>",
+        "loras": [
+          {
+            "name": "BunnySlop_MOSS",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "MOSS-HOCF_000001925",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "kzmynon-moss-v1_comfyui",
+            "strength": 1,
+            "active": true,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "Nyalia_moss_v1_lokr",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "ba_style_moss_uma_v1_1000",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": true,
+            "locked": false
+          },
+          {
+            "name": "@handwritten_speech_bubble_94255_moss_v0.0.0",
+            "strength": "1.00",
+            "active": false,
+            "expanded": false,
+            "clipStrength": "1.00",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "fkey-lora-r4-muon-step6840-comfy",
+            "strength": "0.60",
+            "active": false,
+            "expanded": false,
+            "clipStrength": "0.60",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "ChenbinStyleMossImage_v10MossImage",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "moss_pussy_lora_v1.0",
+            "strength": "0.80",
+            "active": false,
+            "expanded": false,
+            "clipStrength": "0.80",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "moss_context_detaile_tweaker_20261018_rank2",
+            "strength": "0.40",
+            "active": true,
+            "expanded": false,
+            "clipStrength": "0.40",
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "realskin_r32_comfy",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          },
+          {
+            "name": "sb10",
+            "strength": 1,
+            "active": false,
+            "expanded": false,
+            "clipStrength": 1,
+            "selected": false,
+            "locked": false
+          }
+        ]
+      },
+      "color": "#223",
+      "bgcolor": "#335"
+    },
+    {
+      "id": 1587,
+      "type": "MossMangaLayout",
+      "pos": [
+        1812.1658106896127,
+        186.8846450804159
+      ],
+      "size": [
+        540.5255786381836,
+        809.1982450923462
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "layout_prompt",
+          "type": "STRING",
+          "links": [
+            2707
+          ]
+        },
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            2697
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            2698
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MossMangaLayout",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "aaaliceControlHostId": "host_206053aa-43a7-4671-b801-0eed844a6854"
+      },
+      "widgets_values": [
+        "",
+        "my_layout_2",
+        "{\"id\":\"my_layout_2\",\"label\":\"自定义版式\",\"description\":\"11\",\"usage\":\"11\",\"readingOrder\":\"panel-1 → panel-2\",\"canvas\":{\"width\":1088,\"height\":1920},\"panels\":[{\"position\":\"panel-1\",\"slots\":{\"F\":[-808,-467,-232,131],\"S\":[-660,-438,-268,112]},\"layer\":0,\"slotNotes\":{\"F\":\"111\",\"S\":\"一个女孩\"}},{\"position\":\"panel-2\",\"slots\":{\"F\":[194,-180,768,480],\"S\":[355,-154,745,454]},\"layer\":1,\"slotNotes\":{\"S\":\"一个男孩\"}}],\"promptMode\":\"llm\",\"promptCaption\":\"11\"}",
+        72,
+        ""
+      ],
+      "widgets_values_named": {
+        "layout_json": "",
+        "layout_id": "my_layout_2",
+        "layout_snapshot": "{\"id\":\"my_layout_2\",\"label\":\"自定义版式\",\"description\":\"11\",\"usage\":\"11\",\"readingOrder\":\"panel-1 → panel-2\",\"canvas\":{\"width\":1088,\"height\":1920},\"panels\":[{\"position\":\"panel-1\",\"slots\":{\"F\":[-808,-467,-232,131],\"S\":[-660,-438,-268,112]},\"layer\":0,\"slotNotes\":{\"F\":\"111\",\"S\":\"一个女孩\"}},{\"position\":\"panel-2\",\"slots\":{\"F\":[194,-180,768,480],\"S\":[355,-154,745,454]},\"layer\":1,\"slotNotes\":{\"S\":\"一个男孩\"}}],\"promptMode\":\"llm\",\"promptCaption\":\"11\"}",
+        "bleed": 72,
+        "版式预览": ""
+      }
+    },
+    {
+      "id": 1588,
+      "type": "EmptyFlux2LatentImage",
+      "pos": [
+        2501.8599713110148,
+        913.05507838167
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 2697
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 2698
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            2706
+          ]
+        }
+      ],
+      "title": "画布尺寸｜16的倍数",
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.42.3",
+        "Node name for S&R": "EmptyFlux2LatentImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        },
+        "aaaliceControlHostId": "host_aa613db6-7100-493d-a879-cf5f1f6997a5"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ],
+      "widgets_values_named": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      }
+    }
+  ],
+  "links": [
+    [
+      3,
+      1,
+      0,
+      15,
+      0,
+      "MODEL"
+    ],
+    [
+      4,
+      15,
+      0,
+      13,
+      0,
+      "MODEL"
+    ],
+    [
+      5,
+      15,
+      0,
+      21,
+      0,
+      "MODEL"
+    ],
+    [
+      16,
+      4,
+      0,
+      16,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      17,
+      5,
+      0,
+      16,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      21,
+      16,
+      0,
+      17,
+      0,
+      "LATENT"
+    ],
+    [
+      22,
+      32,
+      0,
+      17,
+      1,
+      "VAE"
+    ],
+    [
+      23,
+      17,
+      0,
+      18,
+      0,
+      "IMAGE"
+    ],
+    [
+      24,
+      40,
+      0,
+      42,
+      0,
+      "STRING"
+    ],
+    [
+      26,
+      42,
+      0,
+      4,
+      1,
+      "STRING"
+    ],
+    [
+      6,
+      20,
+      0,
+      22,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      7,
+      13,
+      0,
+      22,
+      0,
+      "MODEL"
+    ],
+    [
+      8,
+      21,
+      0,
+      22,
+      1,
+      "MODEL"
+    ],
+    [
+      9,
+      20,
+      0,
+      27,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      10,
+      23,
+      0,
+      27,
+      0,
+      "INT"
+    ],
+    [
+      11,
+      24,
+      0,
+      27,
+      1,
+      "INT"
+    ],
+    [
+      12,
+      20,
+      0,
+      28,
+      2,
+      "BOOLEAN"
+    ],
+    [
+      13,
+      25,
+      0,
+      28,
+      0,
+      "FLOAT"
+    ],
+    [
+      14,
+      26,
+      0,
+      28,
+      1,
+      "FLOAT"
+    ],
+    [
+      19,
+      27,
+      0,
+      16,
+      4,
+      "INT"
+    ],
+    [
+      20,
+      28,
+      0,
+      16,
+      5,
+      "FLOAT"
+    ],
+    [
+      2692,
+      22,
+      0,
+      45,
+      0,
+      "MODEL"
+    ],
+    [
+      2693,
+      45,
+      0,
+      16,
+      0,
+      "MODEL"
+    ],
+    [
+      2694,
+      31,
+      0,
+      45,
+      1,
+      "CLIP"
+    ],
+    [
+      2695,
+      45,
+      1,
+      4,
+      0,
+      "CLIP"
+    ],
+    [
+      2696,
+      45,
+      1,
+      5,
+      0,
+      "CLIP"
+    ],
+    [
+      2697,
+      1587,
+      1,
+      1588,
+      0,
+      "INT"
+    ],
+    [
+      2698,
+      1587,
+      2,
+      1588,
+      1,
+      "INT"
+    ],
+    [
+      2706,
+      1588,
+      0,
+      16,
+      3,
+      "LATENT"
+    ],
+    [
+      2707,
+      1587,
+      0,
+      42,
+      1,
+      "STRING"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "01  模型加载",
+      "bounding": [
+        0,
+        100,
+        480,
+        1280
+      ],
+      "color": "#6f7e9e",
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "02  加速与参数",
+      "bounding": [
+        520,
+        100,
+        780,
+        1280
+      ],
+      "color": "#8a6f9e",
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "03  提示词与画布",
+      "bounding": [
+        1340,
+        100,
+        1040,
+        1280
+      ],
+      "color": "#3f789e",
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "04  采样输入",
+      "bounding": [
+        2420,
+        100,
+        760,
+        1280
+      ],
+      "color": "#9e7f55",
+      "flags": {}
+    },
+    {
+      "id": 5,
+      "title": "05  出图",
+      "bounding": [
+        3220,
+        100,
+        720,
+        1280
+      ],
+      "color": "#6f7e9e",
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.5131581182307068,
+      "offset": [
+        -88.30357955507142,
+        253.6062213402118
+      ]
+    },
+    "workflowRendererVersion": "LG",
+    "qgn_navigation_groups": [],
+    "qgn_locked": false,
+    "aaaliceSidebar": {
+      "version": 4,
+      "pages": []
+    },
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "frontendVersion": "1.55.18",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "extensions": {
+    "seed_widgets": {
+      "16": 0
+    }
+  },
+  "version": 0.4,
+  "seed_widgets": {
+    "16": 0
+  }
+}
