@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ModalMask from '@/components/ModalMask.vue';
-import { canvasOf, normalizeCanvas, orientationOf, parseCustomLayout, type MangaCustomLayout, type ResolvedLayout, type ManualContent } from '@/manga/layouts';
+import { canvasOf, normalizeCanvas, orientationOf, parseCustomLayout, sharedDescription, type MangaCustomLayout, type ResolvedLayout, type ManualContent } from '@/manga/layouts';
 import { clamp, deformCorner, editablePanel, fitRect, MIN_PANEL, panelRect, quadPoints, saveEditedPanel, setSlotRect, slotRect, snapRect, type EditablePanel, type PanelRect } from '@/manga/editor';
 
-const props = defineProps<{ sources: (ResolvedLayout & { key: string })[]; existingIds: string[]; initialKey?: string; editingId?: string; initialMode?: 'llm' | 'manual'; libraryIds?: Record<'llm' | 'manual', string[]> }>();
+const props = defineProps<{ sources: (ResolvedLayout & { key: string })[]; existingIds: string[]; initialKey?: string; editingId?: string; initialMode?: 'llm' | 'manual' }>();
 const emit = defineEmits<{ close: []; save: [layout: MangaCustomLayout] }>();
-interface LayoutDocument { id: string; label: string; usage: string; promptMode: 'llm' | 'manual'; promptCaption: string; width: number; height: number; panels: EditablePanel[] }
+interface LayoutDocument { id: string; label: string; description: string; promptMode: 'llm' | 'manual'; width: number; height: number; panels: EditablePanel[] }
 function unusedId(base: string): string {
   let id = base, suffix = 2;
   while (props.existingIds.includes(id)) id = `${base}_${suffix++}`;
   return id;
 }
-const doc = ref<LayoutDocument>({ id: unusedId('my_layout'), label: '自定义版式', usage: '', promptMode:props.initialMode ?? 'llm', promptCaption:'', width: 1088, height: 1920, panels: [] });
+const doc = ref<LayoutDocument>({ id: unusedId('my_layout'), label: '自定义版式', description: '', promptMode:props.initialMode ?? 'llm', width: 1088, height: 1920, panels: [] });
 const selected = ref(-1);
 const selectedSlot = ref('');
 const sourceKey = ref(props.initialKey ?? '');
@@ -22,16 +22,21 @@ const error = ref('');
 const discard = ref(false);
 const dialog = ref<HTMLElement>();
 const svg = ref<SVGSVGElement>();
+const canvasViewport = ref<HTMLDivElement>();
+const canvasZoom = ref(1);
 const canvasWidth = ref(1088), canvasHeight = ref(1920);
 const undoStack = ref<string[]>([]), redoStack = ref<string[]>([]);
 const baseline = ref('');
 const current = computed(() => doc.value.panels[selected.value]);
 const activeRect = computed(() => current.value ? selectedSlot.value && current.value.slots[selectedSlot.value] ? slotRect(current.value, selectedSlot.value) : current.value : null);
-const slotLabels: Record<string,string> = { C:'内区', S:'主体', T:'顶部文字', B:'底部文字', TL:'左上文字', TR:'右上文字', BL:'左下文字', BR:'右下文字', L:'左人物', R:'右人物', O:'道具/音效', ML:'左侧文字', MR:'右侧文字', E:'有限越线' };
+const slotLabels: Record<string,string> = { C:'内区', S:'主体', T:'顶部文字', B:'底部文字', TL:'左上文字', TR:'右上文字', BL:'左下文字', BR:'右下文字', L:'左人物', R:'右人物', O:'道具/音效', ML:'左侧文字', MR:'右侧文字', E:'有限越线', X:'出框区' };
 const newSlot = ref('S');
 const availableSlots = computed(() => ['C','S','T','B','TL','TR','BL','BR','ML','MR','L','R','O'].filter(key => current.value && !current.value.slots[key]));
 const slotToAdd = computed(() => availableSlots.value.includes(newSlot.value) ? newSlot.value : availableSlots.value[0] ?? '');
 const contentItems = computed(() => current.value?.slotContents?.[selectedSlot.value || 'F'] ?? []);
+const quickEdit = ref<{index: number; key: string} | null>(null);
+const quickDraft = ref('');
+const quickField = ref<HTMLTextAreaElement>();
 let slotSession: { before: string; undo: string[]; redo: string[] } | null = null;
 function confirmSlot(): void {
   slotSession = null; selectedSlot.value = '';
@@ -69,7 +74,7 @@ function addSlot(): void {
   selectSlot(selected.value,key);
 }
 function resetSlots(): void {
-  if (current.value) edit(() => { current.value!.slots = editablePanel(current.value!, canvas.value).slots; current.value!.corners = current.value!.corners.F ? { F:current.value!.corners.F } : {}; selectedSlot.value = ''; });
+  if (current.value) edit(() => { const panel=current.value!; panel.slots = {...editablePanel(panel, canvas.value).slots,...(panel.slots.X?{X:panel.slots.X}:{})}; panel.corners = Object.fromEntries(Object.entries(panel.corners).filter(([key])=>key==='F'||key==='X')); selectedSlot.value = ''; });
 }
 function visibleSlots(panel: EditablePanel, index: number): { key: string; rect: PanelRect }[] {
   if (!slotsPreview.value) return [];
@@ -118,19 +123,24 @@ function loadSource(): void {
   if (!source) return;
   edit(() => {
     const editing = source.id === props.editingId;
-    doc.value = { id: editing ? source.id : unusedId(`${source.id}_copy`), label: editing ? source.label : `${source.label}（副本）`, usage: source.usage ?? '', promptMode:source.promptMode ?? 'llm', promptCaption:source.promptCaption ?? '', ...source.canvas, panels: source.panels.map((panel,index) => ({...editablePanel(panelRect(panel, source.canvas), source.canvas, panel), layer:panel.layer ?? index})) };
+    doc.value = { id: editing ? source.id : unusedId(`${source.id}_copy`), label: editing ? source.label : `${source.label}（副本）`, description:sharedDescription(source), promptMode:source.promptMode ?? 'llm', ...source.canvas, panels: source.panels.map((panel,index) => ({...editablePanel(panelRect(panel, source.canvas), source.canvas, panel), layer:panel.layer ?? index})) };
   });
   canvasWidth.value = doc.value.width; canvasHeight.value = doc.value.height;
   selectPanel(doc.value.panels.length ? 0 : -1);
 }
 function resizeCanvas(): void {
+  alignCanvasInput();
   const size = normalizeCanvas({ width: canvasWidth.value, height: canvasHeight.value });
-  if (!size) { error.value = '画布宽高须为 64～8192 的偶数。'; return; }
+  if (!size) { error.value = '画布宽高须为 64～8192 的数值，输入完成后自动对齐到最近的 16 倍数。'; return; }
   edit(() => {
     const old = canvas.value;
     doc.value.panels = doc.value.panels.map(p => ({ ...p, ...fitRect({ x: p.x * size.width / old.width, y: p.y * size.height / old.height, width: p.width * size.width / old.width, height: p.height * size.height / old.height }, size) }));
     Object.assign(doc.value, size);
   });
+}
+function alignCanvasInput(): void {
+  const align=(value: number): number => Number.isFinite(value) ? Math.max(64,Math.min(8192,Math.round(value/16)*16)) : value;
+  canvasWidth.value=align(canvasWidth.value);canvasHeight.value=align(canvasHeight.value);
 }
 function preset(width: number, height: number): void { canvasWidth.value = width; canvasHeight.value = height; resizeCanvas(); }
 function add(): void {
@@ -153,7 +163,7 @@ function changeRect(key: keyof PanelRect, event: Event): void {
   const value = Number((event.target as HTMLInputElement).value);
   if (activeRect.value && Number.isFinite(value)) edit(() => { setActiveRect(fitRect({ ...activeRect.value!, [key]: value }, canvas.value, selectedSlot.value ? 1 : MIN_PANEL)); }, true);
 }
-function changeText(key: 'id' | 'label' | 'usage' | 'promptCaption', event: Event): void { edit(() => { doc.value[key] = (event.target as HTMLInputElement).value; }); }
+function changeText(key: 'id' | 'label' | 'description', event: Event): void { edit(() => { doc.value[key] = (event.target as HTMLInputElement).value; }); }
 function changePromptMode(mode: 'llm' | 'manual'): void {
   const key=selectedSlot.value;
   edit(() => { doc.value.promptMode=mode; });
@@ -175,16 +185,48 @@ function moveContent(index: number, delta: number): void {
   if (to<0 || to>=contentItems.value.length) return;
   edit(() => { const [item]=contentItems.value.splice(index,1); contentItems.value.splice(to,0,item); },true);
 }
-function changeSlotNote(event: Event): void {
-  if (!current.value) return;
-  const key = selectedSlot.value || 'F', note = (event.target as HTMLTextAreaElement).value;
+function frameDescription(panel: EditablePanel, key: string): string {
+  return panel.slotNotes?.[key] ?? (panel.slotContents?.[key] ?? []).filter(item=>item.label!=='text' && item.caption.trim()).map(item=>item.caption).join('\n');
+}
+function setFrameDescription(index: number, key: string, note: string): void {
+  const panel=doc.value.panels[index];
+  if (!panel) return;
   edit(() => {
-    if (note) (current.value!.slotNotes ??= {})[key] = note;
-    else if (current.value!.slotNotes) delete current.value!.slotNotes[key];
+    const visuals=(panel.slotContents?.[key] ?? []).filter(item=>item.label!=='text');
+    if (visuals.length===1 && (!panel.slotNotes?.[key] || panel.slotNotes[key]===visuals[0].caption)) visuals[0].caption=note;
+    if (note) (panel.slotNotes ??= {})[key] = note;
+    else if (panel.slotNotes) delete panel.slotNotes[key];
   }, true);
 }
+function changeSlotNote(event: Event): void { setFrameDescription(selected.value,selectedSlot.value || 'F',(event.target as HTMLTextAreaElement).value); }
+function openDescription(index: number, key: string): void {
+  selectSlot(index,key==='F'?'':key);
+  quickEdit.value={index,key};quickDraft.value=frameDescription(doc.value.panels[index],key);
+  void nextTick(()=>quickField.value?.focus());
+}
+function saveQuickDescription(): void {
+  if (!quickEdit.value) return;
+  setFrameDescription(quickEdit.value.index,quickEdit.value.key,quickDraft.value);quickEdit.value=null;
+}
+function previewDescription(panel: EditablePanel, key: string): string {
+  const text=frameDescription(panel,key).replace(/\s+/g,' ').trim();
+  return text.length>80?text.slice(0,80)+'…':text;
+}
 
-let gesture: { pointerId: number; x: number; y: number; rect: PanelRect; before: string; handle: string; quad:number[][]; deform:boolean } | null = null;
+let gesture: { pointerId: number; x: number; y: number; clientX:number; clientY:number; dragging:boolean; rect: PanelRect; before: string; handle: string; quad:number[][]; deform:boolean } | null = null;
+function zoomCanvas(event: WheelEvent): void {
+  if (!event.ctrlKey || !event.deltaY) return;
+  event.preventDefault();event.stopPropagation();
+  if (gesture || !svg.value || !canvasViewport.value) return;
+  const viewport=canvasViewport.value, before=svg.value.getBoundingClientRect();
+  const x=(event.clientX-before.left)/before.width, y=(event.clientY-before.top)/before.height;
+  const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?viewport.clientHeight:1);
+  canvasZoom.value=clamp(canvasZoom.value*Math.exp(-delta*.002),.25,4);
+  void nextTick(()=>{
+    const after=svg.value?.getBoundingClientRect();
+    if (after) { viewport.scrollLeft+=after.left+x*after.width-event.clientX;viewport.scrollTop+=after.top+y*after.height-event.clientY; }
+  });
+}
 function point(event: PointerEvent): { x: number; y: number } {
   const rect = svg.value!.getBoundingClientRect();
   return { x: (event.clientX - rect.left) / rect.width * doc.value.width, y: (event.clientY - rect.top) / rect.height * doc.value.height };
@@ -192,12 +234,16 @@ function point(event: PointerEvent): { x: number; y: number } {
 function begin(event: PointerEvent, index: number, handle = '', slot = ''): void {
   if (event.button !== 0 || gesture) return;
   selectSlot(index, slot);
-  gesture = { pointerId: event.pointerId, ...point(event), rect: { ...activeRect.value! }, before: snapshot(), handle, quad:quadPoints(current.value!,slot || 'F'), deform:event.ctrlKey && handle.length===2 };
-  svg.value!.setPointerCapture(event.pointerId);
+  gesture = { pointerId: event.pointerId, ...point(event), clientX:event.clientX,clientY:event.clientY,dragging:false,rect: { ...activeRect.value! }, before: snapshot(), handle, quad:quadPoints(current.value!,slot || 'F'), deform:event.ctrlKey && handle.length===2 };
 }
 function move(event: PointerEvent): void {
   if (!gesture || event.pointerId !== gesture.pointerId) return;
   const p = point(event), g = gesture, dx = p.x - g.x, dy = p.y - g.y;
+  // Capturing a stationary click on the SVG retargets dblclick away from its frame.
+  if (!g.dragging) {
+    if (Math.hypot(event.clientX-g.clientX,event.clientY-g.clientY)<3) return;
+    g.dragging=true;svg.value!.setPointerCapture(event.pointerId);
+  }
   const minimum = selectedSlot.value ? 1 : MIN_PANEL;
   if (g.deform) {
     const index = ['nw','ne','se','sw'].indexOf(g.handle);
@@ -258,9 +304,7 @@ function keydown(event: KeyboardEvent): void {
 }
 function save(): void {
   if (canvasWidth.value !== doc.value.width || canvasHeight.value !== doc.value.height) { error.value = '画布尺寸已修改，请先点击“应用尺寸”。'; return; }
-  const ids=props.libraryIds?.[doc.value.promptMode] ?? props.existingIds;
-  const editingSameLibrary=!props.libraryIds || doc.value.promptMode === (props.initialMode ?? 'llm');
-  if (!doc.value.id.trim() || (ids.includes(doc.value.id.trim()) && !(editingSameLibrary && doc.value.id.trim() === props.editingId))) { error.value = '目标版式库已有此 ID，请填写未使用的 ID，或从目标库打开该版式编辑。'; return; }
+  if (!doc.value.id.trim() || (props.existingIds.includes(doc.value.id.trim()) && doc.value.id.trim() !== props.editingId)) { error.value = '版式库已有此 ID，请填写未使用的 ID，或打开该版式编辑。'; return; }
   if (!doc.value.panels.length) { error.value = '请至少添加一格。'; return; }
   try {
     const orientation = orientationOf(doc.value.width, doc.value.height);
@@ -272,7 +316,7 @@ function save(): void {
     })) {
       error.value = '此版式含另一画布方向。使用非标准尺寸时请填写新的版式 ID，另存后可保留原版式的两个方向。'; return;
     }
-    const layout = parseCustomLayout(JSON.stringify({ id: doc.value.id.trim(), label: doc.value.label.trim() || doc.value.id.trim(), usage: doc.value.usage.trim(), promptMode:doc.value.promptMode, promptCaption:doc.value.promptCaption, canvas: canvas.value, readingOrder: positions.value.join(' → '), [orientation]: doc.value.panels.map((r, i) => saveEditedPanel(r, canvas.value, positions.value[i])) }));
+    const layout = parseCustomLayout(JSON.stringify({ id: doc.value.id.trim(), label: doc.value.label.trim() || doc.value.id.trim(), description:doc.value.description.trim(), usage:doc.value.description.trim(), promptMode:doc.value.promptMode, promptCaption:doc.value.description.trim(), canvas: canvas.value, readingOrder: positions.value.join(' → '), [orientation]: doc.value.panels.map((r, i) => saveEditedPanel(r, canvas.value, positions.value[i])) }));
     emit('save', layout);
   } catch (e) { error.value = e instanceof Error ? e.message : String(e); }
 }
@@ -295,10 +339,9 @@ onMounted(() => {
         </div>
       </header>
       <div class="canvas-controls">
-        <label>画布宽 <input v-model.number="canvasWidth" aria-label="画布宽" type="number" min="64" max="8192" step="2" /></label>
-        <label>画布高 <input v-model.number="canvasHeight" aria-label="画布高" type="number" min="64" max="8192" step="2" /></label>
+        <label>画布宽 <input v-model.number="canvasWidth" aria-label="画布宽" type="number" min="64" max="8192" step="16" @change="alignCanvasInput" /></label>
+        <label>画布高 <input v-model.number="canvasHeight" aria-label="画布高" type="number" min="64" max="8192" step="16" @change="alignCanvasInput" /></label>
         <button type="button" @click="resizeCanvas">应用尺寸</button>
-        <button type="button" @click="preset(1088,1920)">1088×1920</button><button type="button" @click="preset(1920,1088)">1920×1088</button><button type="button" @click="preset(1024,1024)">1024×1024</button>
       </div>
       <p class="hint">改变画布尺寸会等比例换算各轴坐标。工作流与预设尺寸须与此画布一致；请连接节点的宽高输出到潜空间尺寸输入。</p>
       <div class="designer-body">
@@ -319,32 +362,33 @@ onMounted(() => {
           <p class="hint">{{ current ? `当前第 ${selectedLayer+1} / ${doc.panels.length} 层（数字越大越靠前）。` : '' }}层级控制重叠遮挡，不改变读序；遮挡关系自动写入生图提示词。</p>
         </aside>
         <div class="canvas-area">
-          <svg ref="svg" class="layout-canvas" :viewBox="`0 0 ${doc.width} ${doc.height}`" :style="{ aspectRatio: `${doc.width}/${doc.height}`, width: `min(100%, ${62*doc.width/doc.height}vh)` }" role="img" aria-label="版式画布" tabindex="0" @pointermove="move" @pointerup="end($event)" @pointercancel="end($event,true)" @lostpointercapture="end($event,true)">
+          <div ref="canvasViewport" class="canvas-viewport" aria-label="画布缩放区域" @wheel.capture="zoomCanvas">
+          <svg ref="svg" class="layout-canvas" :viewBox="`0 0 ${doc.width} ${doc.height}`" :style="{ aspectRatio: `${doc.width}/${doc.height}`, width: `min(${100*canvasZoom}%, ${62*doc.width/doc.height*canvasZoom}vh)` }" role="img" aria-label="版式画布" tabindex="0" @pointermove="move" @pointerup="end($event)" @pointercancel="end($event,true)" @lostpointercapture="end($event,true)">
             <rect :width="doc.width" :height="doc.height" fill="white" @pointerdown="selectPanel(-1)" />
-            <g v-for="{ rect: r, index: i } in drawn" :key="i" class="panel" :class="{ selected: i===selected }" @pointerdown.stop.prevent="begin($event,i)">
+            <g v-for="{ rect: r, index: i } in drawn" :key="i" class="panel" :data-panel="i" :class="{ selected: i===selected }" @pointerdown.stop="begin($event,i)" @dblclick.stop.prevent="openDescription(i,'F')">
               <polygon :points="polygon(r,'F')" :fill="i===selected ? '#dcecff' : '#f1f2f4'" :stroke="i===selected ? '#2675cf' : '#333'" stroke-width="2" vector-effect="non-scaling-stroke" />
-              <g v-for="s in visibleSlots(r,i)" :key="s.key" class="slot" :data-slot="s.key" @pointerdown.stop.prevent="begin($event,i,'',s.key)">
+              <foreignObject v-if="previewDescription(r,'F')" :x="r.x+6" :y="r.y+doc.width*.04" :width="Math.max(1,r.width-12)" :height="Math.max(1,Math.min(r.height-doc.width*.04,doc.width*.055))" class="frame-description"><div :style="{fontSize:`${doc.width*.018}px`}" :title="frameDescription(r,'F')">{{ previewDescription(r,'F') }}</div></foreignObject>
+              <g v-for="s in visibleSlots(r,i)" :key="s.key" class="slot" :data-slot="s.key" @pointerdown.stop="begin($event,i,'',s.key)" @dblclick.stop.prevent="openDescription(i,s.key)">
                 <polygon :points="polygon(r,s.key)" :fill="s.key==='T' ? '#e5ba6638' : '#50a18a18'" :stroke="i===selected && s.key===selectedSlot ? '#df7827' : s.key==='T' ? '#b48733' : '#50a18a'" :stroke-width="i===selected && s.key===selectedSlot ? 2 : 1" stroke-dasharray="5 4" vector-effect="non-scaling-stroke" />
                 <text :x="s.rect.x+5" :y="s.rect.y+doc.width*.025" :font-size="doc.width*.021" fill="#575c62">{{ s.key }}</text>
+                <foreignObject v-if="previewDescription(r,s.key)" :x="s.rect.x+6" :y="s.rect.y+doc.width*.032" :width="Math.max(1,s.rect.width-12)" :height="Math.max(1,Math.min(s.rect.height-doc.width*.032,doc.width*.055))" class="frame-description"><div :style="{fontSize:`${doc.width*.018}px`}" :title="frameDescription(r,s.key)">{{ previewDescription(r,s.key) }}</div></foreignObject>
               </g>
               <text :x="r.x+8" :y="r.y+doc.width*.032" :font-size="doc.width*.026" fill="#164b83">{{ i+1 }}</text>
             </g>
               <template v-if="current && activeRect"><rect v-for="h in handles()" :key="h.name" class="resize-handle" :data-ctrl-deform="h.name.length===2" :data-handle="h.name" :rx="h.name.length===2 ? doc.width*.009 : 0" :x="h.x-doc.width*.009" :y="h.y-doc.width*.009" :width="doc.width*.018" :height="doc.width*.018" :fill="selectedSlot ? '#df7827' : '#2675cf'" stroke="white" vector-effect="non-scaling-stroke" :style="{cursor:`${h.name}-resize`}" :aria-label="`${h.name} 控制点`" @pointerdown.stop.prevent="begin($event,selected,h.name,selectedSlot)" /></template>
           </svg>
-          <p class="hint">{{ doc.width }}×{{ doc.height }} · {{ doc.panels.length }} 格 · 黄色：顶部字区 T · 绿色：主体 S<br />槽位可单独移动、缩放和删除；移动外框时槽位跟随，保存后保留编辑结果。</p>
+          </div>
+          <p class="hint">{{ doc.width }}×{{ doc.height }} · {{ doc.panels.length }} 格 · 缩放 {{ Math.round(canvasZoom*100) }}% · Ctrl＋滚轮缩放，双击框编辑描述<br />槽位可单独移动、缩放和删除；移动外框时槽位跟随，保存后保留编辑结果。</p>
         </div>
         <aside class="properties">
           <div class="mode-switch" role="tablist" aria-label="内容编辑模式" :class="{manual:doc.promptMode==='manual'}" @keydown.left.prevent="changePromptMode('llm')" @keydown.right.prevent="changePromptMode('manual')">
             <span class="mode-thumb" aria-hidden="true"></span>
-            <button type="button" role="tab" :aria-selected="doc.promptMode==='llm'" @click="changePromptMode('llm')">← LLM 用途</button>
+            <button type="button" role="tab" :aria-selected="doc.promptMode==='llm'" @click="changePromptMode('llm')">← LLM 说明</button>
             <button type="button" role="tab" :aria-selected="doc.promptMode==='manual'" @click="changePromptMode('manual')">直接提示词 →</button>
           </div>
           <label>版式 ID<input :value="doc.id" aria-label="版式 ID" @change="changeText('id',$event)" /></label>
           <label>名称<input :value="doc.label" aria-label="版式名称" @change="changeText('label',$event)" /></label>
-          <label v-if="doc.promptMode==='llm'">用途说明<textarea :value="doc.usage" aria-label="版式用途" rows="3" @change="changeText('usage',$event)"></textarea></label>
-          <template v-else>
-            <label>整页画面描述<textarea :value="doc.promptCaption" aria-label="整页画面描述" rows="3" placeholder="全页共用的画风、环境和光照，建议用英文填写" @input="changeText('promptCaption',$event)"></textarea></label>
-          </template>
+          <label>画面描述<textarea :value="doc.description" aria-label="整页画面描述" rows="3" placeholder="全页共用的画风、环境与光照；两种模式共用" @input="changeText('description',$event)"></textarea></label>
           <template v-if="current">
             <strong>第 {{ selected+1 }} 格 · {{ selectedSlot ? `${selectedSlot} ${slotLabels[selectedSlot] ?? '槽位'}` : '外框 F' }}</strong>
             <div v-if="selectedSlot" class="slot-actions">
@@ -353,12 +397,11 @@ onMounted(() => {
             <button type="button" :disabled="!selectedSlot" @click="deleteSlot">删除选中槽位</button>
             <button type="button" @click="resetSlots">恢复本格默认槽位</button>
             <div class="inline"><select :value="slotToAdd" aria-label="新增内框类型" :disabled="!availableSlots.length" @change="newSlot=($event.target as HTMLSelectElement).value"><option v-for="key in availableSlots" :key="key" :value="key">{{ key }} {{ slotLabels[key] }}</option></select><button type="button" :disabled="!slotToAdd" @click="addSlot">添加内框</button></div>
-            <label v-if="doc.promptMode==='llm'">{{ selectedSlot ? `内框 ${selectedSlot} 用途说明` : '外框 F 用途说明' }}
-              <textarea :value="current.slotNotes?.[selectedSlot || 'F'] ?? ''" aria-label="当前框用途说明" rows="3" :placeholder="selectedSlot ? '例如：半身主体，侧重人物动作与反应' : '例如：交代场景和人物关系的开场格'" @input="changeSlotNote"></textarea>
+            <label>{{ selectedSlot ? `内框 ${selectedSlot} 画面描述` : '外框 F 画面描述' }}
+              <textarea :value="frameDescription(current,selectedSlot || 'F')" aria-label="当前框画面描述" rows="3" :placeholder="selectedSlot ? '描述本框的人物、动作、场景或取景' : '描述本格的场景与人物关系'" @input="changeSlotNote"></textarea>
             </label>
-            <p v-if="doc.promptMode==='llm'" class="hint">随版式库与工作流快照保存；通过“一键复制说明”与格式要求一起交给 LLM，帮助分配本框内容。留空沿用默认用途，说明本身不作为画面文字。</p>
-            <div v-else class="manual-content">
-              <strong>{{ selectedSlot ? `内框 ${selectedSlot}` : '外框 F' }} 画面描述／台词</strong>
+            <div v-if="doc.promptMode==='manual'" class="manual-content">
+              <strong>{{ selectedSlot ? `内框 ${selectedSlot}` : '外框 F' }} 追加人物／台词</strong>
               <div v-for="(item,index) in contentItems" :key="index" class="content-card">
                 <div class="inline"><span>{{ index+1 }}</span><select :value="item.label" aria-label="内容类型" @change="changeContent(index,'label',$event)"><option value="object">场景／物件</option><option value="character">人物</option><option value="text">文字</option></select></div>
                 <template v-if="item.label==='text'">
@@ -380,14 +423,22 @@ onMounted(() => {
       </div>
       <p v-if="error" role="alert" class="error">{{ error }}</p>
       <footer v-if="discard"><span>放弃未保存的修改？</span><button type="button" @click="discard=false">继续编辑</button><button type="button" @click="emit('close')">放弃修改</button></footer>
+      <div v-if="quickEdit" class="quick-mask" @mousedown.self="quickEdit=null">
+        <section class="quick-dialog" role="dialog" aria-modal="true" aria-label="快速编辑画面描述" @keydown.stop @keydown.esc.prevent="quickEdit=null">
+          <header><strong>第 {{ quickEdit.index+1 }} 格 · {{ quickEdit.key }} 画面描述</strong><button type="button" aria-label="关闭快速编辑" @click="quickEdit=null">✕</button></header>
+          <textarea ref="quickField" v-model="quickDraft" aria-label="快速画面描述" rows="7" @keydown.ctrl.enter.prevent="saveQuickDescription"></textarea>
+          <footer><button type="button" @click="quickEdit=null">取消</button><button type="button" class="primary" @click="saveQuickDescription">确定画面描述</button></footer>
+        </section>
+      </div>
     </section>
   </ModalMask>
 </template>
 
 <style scoped>
+.frame-description{pointer-events:none}.frame-description div{background:#fffD;color:#20334e;line-height:1.3;padding:2px 4px;border-radius:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}.quick-mask{position:fixed;inset:0;background:#0006;z-index:10010;display:grid;place-items:center;padding:20px}.quick-dialog{width:min(560px,90vw);padding:18px;background:var(--bbi-surface,#fff);color:var(--bbi-ink,#222);border-radius:10px;box-shadow:0 12px 50px #0005}.quick-dialog textarea{width:100%;resize:vertical}
 .mode-switch{position:relative;display:flex;flex:none;border:1px solid #7d8b9e;border-radius:7px;padding:3px;isolation:isolate}.mode-switch button{flex:1;border:0;padding:7px 2px;font-size:11px;white-space:nowrap;background:transparent}.mode-thumb{position:absolute;z-index:-1;left:3px;top:3px;bottom:3px;width:calc(50% - 3px);background:#2675cf;border-radius:4px;transition:transform .18s}.mode-switch.manual .mode-thumb{transform:translateX(100%)}.mode-switch [aria-selected="true"]{color:#fff}.manual-content{display:flex;flex-direction:column;gap:9px}.content-card{border:1px solid #8885;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:7px}.content-card button{padding:4px;font-size:11px}.content-card textarea{width:100%}
 .slot-actions{grid-column:1/-1;padding:8px;border:1px solid #2675cf66;border-radius:6px}.slot-actions .hint{margin-bottom:0}
 .manga-designer{width:min(1140px,96vw);max-height:94vh;overflow:auto;background:var(--bbi-surface,#fff);color:var(--bbi-ink,#222);border-radius:12px;padding:18px;box-sizing:border-box;box-shadow:0 16px 64px #0005;outline:none;font-size:13px}
-header,footer,.canvas-controls,.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}header{justify-content:space-between;font-size:17px;margin-bottom:14px}footer{justify-content:flex-end;margin-top:14px;border-top:1px solid #8884;padding-top:12px}.canvas-controls label{display:flex;align-items:center;gap:5px}.canvas-controls input{width:90px}.designer-body{display:grid;grid-template-columns:180px minmax(180px,1fr) 180px;gap:16px;margin-top:12px}.tools,.properties{display:flex;flex-direction:column;gap:9px}.tools label:not(.check),.properties label{display:flex;flex-direction:column;gap:5px}.check{display:flex;gap:5px;align-items:center}input,textarea,select{box-sizing:border-box;min-width:0;max-width:100%;padding:6px;border:1px solid #8886;border-radius:5px;color:inherit;background:transparent;font:inherit}button{border:1px solid #8886;border-radius:6px;background:transparent;color:inherit;padding:6px 9px;cursor:pointer;font:inherit}button:disabled{opacity:.4;cursor:default}button.active,button.primary{background:#2675cf;color:white}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.layout-canvas:focus-visible{outline:2px solid #2675cf;outline-offset:2px}.hint{font-size:12px;line-height:1.6;opacity:.75;margin:7px 0}.canvas-area{background:#8881;border:1px solid #8884;padding:12px;display:flex;flex-direction:column;align-items:center;min-width:0}.layout-canvas{display:block;height:auto;overflow:visible;touch-action:none;user-select:none;box-shadow:0 2px 10px #0003}.panel,.slot{cursor:move}.slot-list{display:flex;flex-wrap:wrap;gap:4px;max-height:145px;overflow:auto}.slot-list button{font-size:11px;padding:4px 5px}.panel text{pointer-events:none}.error{color:#b3261e}
-@media(max-width:760px){.designer-body{grid-template-columns:1fr}.tools{display:flex;flex-direction:row;flex-wrap:wrap}.tools>.hint{width:100%}.properties{display:grid;grid-template-columns:1fr 1fr}.properties>.hint{grid-column:1/-1}.layout-canvas{max-height:58vh}.manga-designer{padding:12px}}
+header,footer,.canvas-controls,.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}header{justify-content:space-between;font-size:17px;margin-bottom:14px}footer{justify-content:flex-end;margin-top:14px;border-top:1px solid #8884;padding-top:12px}.canvas-controls label{display:flex;align-items:center;gap:5px}.canvas-controls input{width:90px}.designer-body{display:grid;grid-template-columns:180px minmax(180px,1fr) 180px;gap:16px;margin-top:12px}.tools,.properties{display:flex;flex-direction:column;gap:9px}.tools label:not(.check),.properties label{display:flex;flex-direction:column;gap:5px}.check{display:flex;gap:5px;align-items:center}input,textarea,select{box-sizing:border-box;min-width:0;max-width:100%;padding:6px;border:1px solid #8886;border-radius:5px;color:inherit;background:transparent;font:inherit}button{border:1px solid #8886;border-radius:6px;background:transparent;color:inherit;padding:6px 9px;cursor:pointer;font:inherit}button:disabled{opacity:.4;cursor:default}button.active,button.primary{background:#2675cf;color:white}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.layout-canvas:focus-visible{outline:2px solid #2675cf;outline-offset:2px}.hint{font-size:12px;line-height:1.6;opacity:.75;margin:7px 0}.canvas-area{background:#8881;border:1px solid #8884;padding:12px;display:flex;flex-direction:column;align-items:center;min-width:0}.canvas-viewport{width:100%;height:62vh;overflow:auto;overscroll-behavior:contain}.layout-canvas{display:block;margin:0 auto;max-width:none;height:auto;overflow:visible;touch-action:none;user-select:none;box-shadow:0 2px 10px #0003}.panel,.slot{cursor:move}.slot-list{display:flex;flex-wrap:wrap;gap:4px;max-height:145px;overflow:auto}.slot-list button{font-size:11px;padding:4px 5px}.panel text{pointer-events:none}.error{color:#b3261e}
+@media(max-width:760px){.designer-body{grid-template-columns:1fr}.tools{display:flex;flex-direction:row;flex-wrap:wrap}.tools>.hint{width:100%}.properties{display:grid;grid-template-columns:1fr 1fr}.properties>.hint{grid-column:1/-1}.canvas-viewport{height:58vh}.manga-designer{padding:12px}}
 </style>

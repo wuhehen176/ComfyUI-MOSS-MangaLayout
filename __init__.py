@@ -9,8 +9,9 @@ from .nodes import MossMangaLayout
 from .store import LayoutLibrary, LibraryConflict
 
 
-LIBRARY = LayoutLibrary(Path(folder_paths.get_user_directory())/'default'/'moss_manga_layout'/'layouts.json', Path(__file__).parent/'initial_layouts.json')
-LIBRARIES = {'llm':LIBRARY, 'manual':LayoutLibrary(Path(folder_paths.get_user_directory())/'default'/'moss_manga_layout'/'manual_layouts.json')}
+LIBRARY_ROOT = Path(folder_paths.get_user_directory())/'default'/'moss_manga_layout'
+LIBRARY = LayoutLibrary(LIBRARY_ROOT/'layouts.json', Path(__file__).parent/'initial_layouts.json', legacy_paths=[LIBRARY_ROOT/'manual_layouts.json'])
+LIBRARIES = {'llm':LIBRARY, 'manual':LIBRARY}
 MossMangaLayout.library = LIBRARY
 MossMangaLayout.libraries = LIBRARIES
 NODE_CLASS_MAPPINGS = {'MossMangaLayout':MossMangaLayout}
@@ -22,7 +23,7 @@ def request_library(request):
     mode = request.query.get('mode', 'llm')
     if mode not in LIBRARIES:
         raise ValueError('版式库类型需要 llm 或 manual。')
-    return mode, LIBRARIES[mode]
+    return mode, LIBRARY
 
 
 if getattr(PromptServer, 'instance', None) is not None:
@@ -40,8 +41,6 @@ if getattr(PromptServer, 'instance', None) is not None:
             body = await request.json()
             mode, library = request_library(request)
             layouts = body.get('layouts')
-            if isinstance(layouts, list) and any(not isinstance(entry, dict) or entry.get('promptMode', 'llm') != mode for entry in layouts):
-                raise ValueError('版式模式与目标库不一致，请分别保存到对应版式库。')
             return web.json_response(library.save(layouts, body.get('revision')))
         except LibraryConflict as error:
             return web.json_response({'error':str(error)}, status=409)
@@ -61,8 +60,6 @@ if getattr(PromptServer, 'instance', None) is not None:
         try:
             body = await request.json()
             layout = validate_layout(body['layout'])
-            if layout.get('promptMode') != 'manual':
-                raise ValueError('请先在编辑器切换到直接提示词模式并保存。')
             bleed = body.get('bleed', 72)
             if not isinstance(bleed, int) or isinstance(bleed, bool) or not 0 <= bleed <= 8192:
                 raise ValueError('出框像素需要 0～8192 的整数。')

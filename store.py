@@ -13,11 +13,13 @@ class LibraryConflict(ValueError):
 
 
 class LayoutLibrary:
-    def __init__(self, path, seed=None):
+    def __init__(self, path, seed=None, legacy_paths=()):
         self.path = Path(path)
         self.directory = self.path.with_suffix('')
         self.index = self.directory/'index.json'
         self.seed = Path(seed) if seed else None
+        self.legacy_paths = [Path(path) for path in legacy_paths]
+        self.migration_marker = self.directory/'unified-library-v1.json'
         self.lock = threading.RLock()
 
     def read(self):
@@ -27,6 +29,25 @@ class LayoutLibrary:
                 data = [validate_layout(entry) for entry in json.loads(source.read_text(encoding='utf-8'))] if source else []
                 self._write(data)
             layouts = [validate_layout(json.loads((self.directory/name).read_text(encoding='utf-8'))) for name in self._files()]
+            if self.legacy_paths and not self.migration_marker.exists():
+                for path in self.legacy_paths:
+                    legacy = LayoutLibrary(path)
+                    if not path.exists() and not legacy.index.exists():
+                        continue
+                    for entry in legacy.read()['layouts']:
+                        base, suffix = entry['id'], 1
+                        while True:
+                            found = next((layout for layout in layouts if layout['id'] == entry['id']), None)
+                            if found is None:
+                                layouts.append(entry)
+                                break
+                            # Keep different legacy pages instead of overwriting a shared ID.
+                            if {k:v for k,v in found.items() if k != 'promptMode'} == {k:v for k,v in entry.items() if k != 'promptMode'}:
+                                break
+                            entry['id'] = base+'_manual'+('' if suffix == 1 else '_'+str(suffix))
+                            suffix += 1
+                self._write(layouts)
+                self._atomic(self.migration_marker, json.dumps({'version':1}))
             return {'layouts':layouts, 'revision':hashlib.sha256(dumps(layouts).encode()).hexdigest()}
 
     def _files(self):

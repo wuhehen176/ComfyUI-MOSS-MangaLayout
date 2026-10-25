@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createRenderer, defineComponent, ssrContextKey } from 'vue';
+import { createRenderer, defineComponent, nextTick, ssrContextKey } from 'vue';
 import Editor from './Editor.vue';
 import { quadPoints } from '@/manga/editor';
 
@@ -29,17 +29,79 @@ function editor(props: Record<string,unknown> = {}) {
 }
 
 describe('版式编辑器 Ctrl 角点交互',()=>{
-  it('跨模式另存可保留相同 ID，但目标库已存在时保护原条目',()=>{
-    const {state,events,close}=editor({initialMode:'llm',editingId:'page',existingIds:['page'],libraryIds:{llm:['page'],manual:[]}});
+  it('普通点击不捕获指针，双击可编辑原框；实际拖动才捕获且可撤销',()=>{
+    const {state,close}=editor();let captures=0;
+    state.svg.value.setPointerCapture=()=>captures++;
+    const event={button:0,pointerId:9,clientX:120,clientY:120,ctrlKey:false};
+    const before=JSON.stringify(state.doc.value);
+    for (let i=0;i<2;i++) {state.begin(event,0,'','S');state.move({...event,clientX:121});state.end(event);}
+    expect(captures).toBe(0);expect(JSON.stringify(state.doc.value)).toBe(before);
+    state.openDescription(0,'S');expect(state.quickEdit.value).toEqual({index:0,key:'S'});state.quickEdit.value=null;
+    state.begin(event,0,'','S');state.move({...event,clientX:160,clientY:160});state.end(event);
+    expect(captures).toBe(1);expect(JSON.stringify(state.doc.value)).not.toBe(before);
+    state.undo();expect(JSON.stringify(state.doc.value)).toBe(before);close();
+  });
+  it('Ctrl滚轮只缩放预览并保持鼠标锚点，普通滚轮不拦截且坐标不变',async()=>{
+    const {state,close}=editor();const before=JSON.stringify(state.doc.value);
+    let prevented=0,stopped=0;
+    state.canvasViewport.value={scrollLeft:0,scrollTop:0,clientHeight:500};
+    state.svg.value.getBoundingClientRect=()=>({left:0,top:0,width:400*state.canvasZoom.value,height:400*state.canvasZoom.value});
+    const event={ctrlKey:false,deltaY:-120,deltaMode:0,clientX:100,clientY:200,preventDefault:()=>prevented++,stopPropagation:()=>stopped++};
+    state.zoomCanvas(event);expect(state.canvasZoom.value).toBe(1);expect(prevented).toBe(0);
+    state.zoomCanvas({...event,ctrlKey:true});await nextTick();
+    expect(state.canvasZoom.value).toBeGreaterThan(1);expect(prevented).toBe(1);expect(stopped).toBe(1);
+    expect(state.canvasViewport.value.scrollLeft).toBeCloseTo(100*(state.canvasZoom.value-1));
+    state.zoomCanvas({...event,ctrlKey:true,deltaY:1e6});await nextTick();expect(state.canvasZoom.value).toBe(.25);
+    state.zoomCanvas({...event,ctrlKey:true,deltaY:-1e6});await nextTick();expect(state.canvasZoom.value).toBe(4);
+    expect(JSON.stringify(state.doc.value)).toBe(before);close();
+  });
+  it('旧版描述合并到共用字段，双击快捷修改可撤销，切换模式保持内容',()=>{
+    const {state,events,close}=editor({editingId:'legacy',initialKey:'legacy',existingIds:['legacy'],sources:[{id:'legacy',key:'legacy',label:'Legacy',usage:'共同场景',promptCaption:'Warm daylight.',canvas:{width:1024,height:1024},panels:[{position:'one',slots:{F:[-400,-400,400,400],S:[-300,-300,300,300]},slotNotes:{S:'人物在桌边'}}]}]});
+    expect(state.doc.value.description).toBe('共同场景\n\nWarm daylight.');
+    state.openDescription(0,'S');expect(state.quickDraft.value).toBe('人物在桌边');
+    state.quickDraft.value='人物递出文件';state.saveQuickDescription();
+    expect(state.previewDescription(state.doc.value.panels[0],'S')).toBe('人物递出文件');
+    expect(state.quickEdit.value).toBeNull();state.changePromptMode('manual');
+    expect(state.doc.value.panels[0].slotNotes.S).toBe('人物递出文件');
+    state.changePromptMode('llm');state.undo();state.undo();state.undo();
+    expect(state.doc.value.panels[0].slotNotes.S).toBe('人物在桌边');
+    state.save();expect(events.at(-1)[1].description).toBe('共同场景\n\nWarm daylight.');
+    close();
+  });
+  it('输入完成后宽高对齐最近16倍数，应用后保留比例、描述与形变',()=>{
+    const {state,close}=editor();state.changeSlotNote({target:{value:'整格描述'}});
+    const old=JSON.parse(JSON.stringify(state.doc.value.panels[0]));
+    state.canvasWidth.value=1081;state.canvasHeight.value=1911;state.alignCanvasInput();
+    expect([state.canvasWidth.value,state.canvasHeight.value]).toEqual([1088,1904]);
+    state.resizeCanvas();expect([state.doc.value.width,state.doc.value.height]).toEqual([1088,1904]);
+    expect(state.doc.value.panels[0].x).toBeCloseTo(Math.round(old.x*1088/1024));
+    expect(state.doc.value.panels[0].slotNotes.F).toBe('整格描述');
+    state.canvasWidth.value=72;state.canvasHeight.value=9000;state.alignCanvasInput();
+    expect([state.canvasWidth.value,state.canvasHeight.value]).toEqual([80,8192]);close();
+  });
+  it('S内框可跨出外框，保存和重新载入保持轮廓及描述，不提供新增X',()=>{
+    const {state,events,close}=editor();
+    expect(state.availableSlots.value).not.toContain('X');
+    state.selectSlot(0,'S');state.changeSlotNote({target:{value:'跨出分格的前景人物'}});
+    state.changeRect('x',{target:{value:0}});state.changeRect('y',{target:{value:0}});
+    state.changeRect('width',{target:{value:1024}});state.changeRect('height',{target:{value:1024}});state.confirmSlot();
+    const before=quadPoints(state.doc.value.panels[0],'S');
+    expect(before[0]).toEqual([0,0]);expect(before[2]).toEqual([1024,1024]);
+    state.save();const saved=events.at(-1)[1];
+    const loaded=editor({editingId:saved.id,sources:[{...saved,key:'saved',panels:saved.portrait??saved.landscape}]});
+    loaded.state.sourceKey.value='saved';loaded.state.loadSource();
+    expect(quadPoints(loaded.state.doc.value.panels[0],'S')).toEqual(before);
+    expect(loaded.state.doc.value.panels[0].slotNotes.S).toBe('跨出分格的前景人物');
+    loaded.close();close();
+  });
+  it('两种输出模式共用一个库，切换后可更新原 ID，仍保护其他版式',()=>{
+    const {state,events,close}=editor({initialMode:'llm',editingId:'page',existingIds:['page','other']});
     state.doc.value.id='page';state.changePromptMode('manual');state.save();
     expect(events.at(-1)?.[0]).toBe('save');
     expect(events.at(-1)?.[1].promptMode).toBe('manual');
+    state.doc.value.id='other';const count=events.length;state.save();
+    expect(events.length).toBe(count);expect(state.error.value).toContain('版式库已有此 ID');
     close();
-    const other=editor({initialMode:'llm',editingId:'page',existingIds:['page'],libraryIds:{llm:['page'],manual:['page']}});
-    other.state.doc.value.id='page';other.state.changePromptMode('manual');other.state.save();
-    expect(other.events.some((event:any[])=>event[0]==='save')).toBe(false);
-    expect(other.state.error.value).toContain('目标版式库已有此 ID');
-    other.close();
   });
   it('新增分格只有外框，手动添加的内框可删除且撤销恢复',()=>{
     const {state,events,close}=editor();
@@ -59,23 +121,24 @@ describe('版式编辑器 Ctrl 角点交互',()=>{
     close();
   });
 
-  it('两页字段独立，内外框内容随保存、复制、缩放和读序移动保留',()=>{
+  it('两种模式共用画面描述，人物和台词随保存、复制、缩放和读序移动保留',()=>{
     const {state,events,close}=editor();
-    state.changeText('usage',{target:{value:'用于交接文件的场景'}});
+    state.changeText('description',{target:{value:'用于交接文件的场景'}});
     state.changeSlotNote({target:{value:'交代场景与人物关系'}});
     state.changePromptMode('manual');
-    state.changeText('promptCaption',{target:{value:'A full-color comic in warm daylight.'}});
+    expect(state.doc.value.description).toBe('用于交接文件的场景');
+    state.changeText('description',{target:{value:'A full-color comic in warm daylight.'}});
     state.addContent();state.changeContent(0,'caption',{target:{value:'An office with a wooden desk.'}});
     state.selectSlot(0,'TR');state.addContent();state.changeContent(0,'text',{target:{value:'资料齐了。'}});state.confirmSlot();
     state.changePromptMode('llm');
-    expect(state.doc.value.usage).toBe('用于交接文件的场景');
+    expect(state.doc.value.description).toBe('A full-color comic in warm daylight.');
     expect(state.doc.value.panels[0].slotNotes.F).toBe('交代场景与人物关系');
     state.changePromptMode('manual');
     state.duplicate();state.selectSlot(1,'TR');state.changeContent(0,'text',{target:{value:'好的。'}});state.confirmSlot();
     expect(state.doc.value.panels[0].slotContents.TR[0].text).toBe('资料齐了。');
     state.preset(1664,2496);state.reorder(-1);state.save();
     const saved=events.findLast((event:any[])=>event[0]==='save')[1];
-    expect(saved).toMatchObject({promptMode:'manual',promptCaption:'A full-color comic in warm daylight.',usage:'用于交接文件的场景'});
+    expect(saved).toMatchObject({promptMode:'manual',description:'A full-color comic in warm daylight.',promptCaption:'A full-color comic in warm daylight.',usage:'A full-color comic in warm daylight.'});
     expect(saved.portrait[0].slotContents.TR[0].text).toBe('好的。');
     expect(saved.portrait[1].slotContents.TR[0].text).toBe('资料齐了。');
     expect(saved.portrait[0].slotNotes.F).toBe('交代场景与人物关系');

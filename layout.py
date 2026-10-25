@@ -36,6 +36,10 @@ def validate_layout(raw):
         raise ValueError('提示词模式需要 llm 或 manual。')
     if 'promptCaption' in layout and not isinstance(layout['promptCaption'], str):
         raise ValueError('整页画面描述需要字符串。')
+    if 'description' in layout and not isinstance(layout['description'], str):
+        raise ValueError('画面描述需要字符串。')
+    if 'description' not in layout:
+        layout['description'] = '\n\n'.join(dict.fromkeys(value.strip() for value in (layout.get('usage'), layout.get('promptCaption')) if isinstance(value, str) and value.strip()))
     canvas = layout.get('canvas', {})
     if not isinstance(canvas, dict) or any(not integer(canvas.get(k)) or not 64 <= canvas[k] <= 8192 or canvas[k] % 2 for k in ('width', 'height')):
         raise ValueError('画布宽高需要是 64～8192 的偶数。')
@@ -97,11 +101,16 @@ def validate_layout(raw):
 
 
 def manual_source(layout):
-    """Build only from the independent content fields; purposes remain metadata."""
+    """Use shared descriptions in both modes; preserve explicit characters and text."""
     layout = validate_layout(layout)
     items = []
     for index, panel in enumerate(layout['panels']):
         panel_items = []
+        for slot, note in panel.get('slotNotes', {}).items():
+            entries = panel.get('slotContents', {}).get(slot, [])
+            if note and not any(entry['label'] != 'text' and entry['caption'].strip() == note for entry in entries):
+                label = 'character' if slot in ('S', 'L', 'R', 'X') else 'object'
+                panel_items.append({'panel':index+1, 'slot':slot, 'label':label, 'caption':note})
         for slot, entries in panel.get('slotContents', {}).items():
             for entry in entries:
                 caption, text = entry['caption'].strip(), entry.get('text', '')
@@ -124,8 +133,10 @@ def manual_source(layout):
         panel_items.sort(key=lambda item: ({'object':0, 'character':1, 'text':2}[item['label']], *(panel['slots'][item['slot']][:2] if item['label'] == 'text' else (0, 0))))
         items.extend(panel_items)
     if not items:
+        if layout['description'].strip():
+            return layout['description']
         raise ValueError('直接提示词模式尚未填写画面或台词。请在编辑器第二页为外框／内框添加内容。')
-    caption = layout.get('promptCaption', '').strip() or 'A full-color Japanese 2D comic page, clean lineart and soft cel shading.'
+    caption = layout['description'].strip() or 'A full-color Japanese 2D comic page, clean lineart and soft cel shading.'
     return dumps({'summary':{'canvas':'single' if len(layout['panels']) == 1 else 'multi_panel', 'caption':caption}, 'items':items})
 
 
@@ -165,6 +176,11 @@ def page_guide(layout, has_text=False):
         line = f'panel {i+1}' + (f' ({frame_position(box, layout["canvas"])}), outer frame yxyx [{", ".join(map(str, box))}]' if box else ' (no outer frame specified)')
         if 'F' in panel.get('shapes', {}):
             line += '; clockwise corners xy ' + dumps(panel['shapes']['F'])
+        if box:
+            for slot in ('S', 'L', 'R'):
+                region = panel['slots'].get(slot)
+                if region and (region[0] < box[0] or region[1] < box[1] or region[2] > box[2] or region[3] > box[3]):
+                    line += f'; {slot} is a continuous foreground subject region extending across the outer border, yxyx {dumps(region)}; keep its subject continuous across the crossed borders'
         frames.append(line)
     ordered = sorted(range(len(panels)), key=lambda i:(panels[i].get('layer', i), i))
     for rank, back in enumerate(ordered):
@@ -212,7 +228,7 @@ def compile_layout(layout_json, layout, bleed=72):
             raise ValueError('每项需要有效的 label（object/character/text）和非空 caption。')
         if item['label'] == 'text' and (not isinstance(item.get('text'), str) or not item['text'].strip()):
             raise ValueError('文字项需要非空 text，不创建空气泡。')
-        if slot == 'X' and 'F' in panel['slots']:
+        if slot == 'X' and 'X' not in panel['slots'] and 'F' in panel['slots']:
             margin = math.floor(bleed*(1.25 if len(panels)<=2 else 1 if len(panels)==3 else .8 if len(panels)==4 else .6)+.5)
             top, left, bottom, right = panel['slots']['F']
             box = [max(-layout['canvas']['height']//2, top-margin), max(-layout['canvas']['width']//2, left-margin), min(layout['canvas']['height']//2, bottom+margin), min(layout['canvas']['width']//2, right+margin)]
@@ -256,7 +272,7 @@ def compile_layout(layout_json, layout, bleed=72):
 
 def format_instructions(layout):
     layout = validate_layout(layout)
-    slots = '\n'.join(f'{i+1}: '+ ' '.join(panel['slots']) + (' X' if 'F' in panel['slots'] else '') for i, panel in enumerate(layout['panels']))
+    slots = '\n'.join(f'{i+1}: '+ ' '.join(panel['slots']) + (' X' if 'F' in panel['slots'] and 'X' not in panel['slots'] else '') for i, panel in enumerate(layout['panels']))
     return f'''只转换输出格式，保留现有描述、风格和准确文字字样，不增加或改写画面内容。
 每次直接输出一个单页 JSON 对象，不含 Markdown、代码围栏或说明文字。
 根字段使用 summary 和 items；summary.caption 是非空字符串，已有的 meta、canvas、palette 按原值保留。

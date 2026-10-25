@@ -35,6 +35,7 @@ export interface MangaSettings {
 /** 设置页可管理的一条版式;两个方向可以各自缺省。 */
 export interface MangaCustomLayout {
   id: string;
+  description?: string;
   promptMode?: 'llm' | 'manual';
   promptCaption?: string;
   label?: string;
@@ -49,6 +50,7 @@ export interface MangaCustomLayout {
 
 export interface ResolvedLayout extends MangaLayoutDef {
   id: string;
+  description?: string;
   canvas: { width: number; height: number };
 }
 
@@ -112,6 +114,7 @@ export function resolveLayouts(manga: MangaSettings, orientation: MangaOrientati
       panels: override?.[orientation]?.length ? override[orientation]! : def.panels.map(withBottomTextSlots),
       promptMode: override?.promptMode,
       promptCaption: override?.promptCaption,
+      description: override?.description,
     });
   }
   for (const entry of pending.values()) {
@@ -126,6 +129,7 @@ export function resolveLayouts(manga: MangaSettings, orientation: MangaOrientati
       panels,
       promptMode: entry.promptMode,
       promptCaption: entry.promptCaption,
+      description: entry.description,
     });
   }
   const disabled = new Set([...manga.disabled, ...(manga.deleted ?? [])]);
@@ -521,7 +525,12 @@ function normalizeCustom(raw: unknown): MangaCustomLayout | null {
   // 只改用途或名称、不动坐标的覆盖条目也合法：panels 会回落到内置表
   if (!portrait && !landscape && !label && !usage && !readingOrder) return null;
   const canvas = normalizeCanvas(entry.canvas);
-  return { id, label, usage, readingOrder, portrait, landscape, ...(canvas ? { canvas } : {}), ...(entry.promptMode ? { promptMode:entry.promptMode } : {}), ...(typeof entry.promptCaption === 'string' ? { promptCaption:entry.promptCaption } : {}) };
+  return { id, label, usage, readingOrder, portrait, landscape, ...(canvas ? { canvas } : {}), ...(entry.promptMode ? { promptMode:entry.promptMode } : {}), ...(typeof entry.promptCaption === 'string' ? { promptCaption:entry.promptCaption } : {}), ...(typeof entry.description === 'string' ? { description:entry.description } : {}) };
+}
+
+export function sharedDescription(value: {description?: unknown; usage?: unknown; promptCaption?: unknown}): string {
+  if (typeof value.description === 'string') return value.description;
+  return [...new Set([value.usage,value.promptCaption].filter((text): text is string => typeof text === 'string' && !!text.trim()).map(text=>text.trim()))].join('\n\n');
 }
 
 export function normalizeCanvas(raw: unknown): { width: number; height: number } | null {

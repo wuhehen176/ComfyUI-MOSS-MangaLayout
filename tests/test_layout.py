@@ -28,6 +28,16 @@ def item(panel=1, slot='S', **extra):
 
 
 class LayoutChecks(unittest.TestCase):
+    def test_cross_panel_s_and_shared_descriptions_compile_without_text(self):
+        layout={'id':'shared','description':'A full-color quiet office.','promptMode':'manual','canvas':{'width':1024,'height':1024},'panels':[{'position':'one','slots':{'F':[-400,-400,400,400],'S':[-500,-500,480,480]},'slotNotes':{'S':'An adult holding a folder in the foreground.'}}]}
+        output=json.loads(core.compile_layout(core.manual_source(layout),layout,bleed=0))
+        self.assertEqual(output['items'][0]['bbox'],[-500,-500,480,480])
+        self.assertNotIn('speech bubble',output['summary']['caption'])
+        self.assertNotIn('library_mode',node.INPUT_TYPES()['optional'])
+        self.assertIn('continuous foreground subject region extending across the outer border',output['summary']['caption'])
+        legacy=copy.deepcopy(layout);legacy.pop('description');legacy['usage']='Office';legacy['promptCaption']='Warm light.'
+        self.assertEqual(core.validate_layout(legacy)['description'],'Office\n\nWarm light.')
+
     def test_plain_prompt_and_json_are_detected_without_changing_manual_mode(self):
         layout=copy.deepcopy(SEEDS[0]);before=copy.deepcopy(layout)
         plain='A full-color comic in a quiet office.\n第一格：成年人在桌边递出文件；第二格：对方点头。'
@@ -46,33 +56,35 @@ class LayoutChecks(unittest.TestCase):
         manual=node().compile(plain,layout['id'],core.dumps(layout))['result'][0]
         self.assertIn('An empty office.',manual);self.assertNotIn('第一格：成年人',manual)
 
-    def test_library_migrates_to_individual_files_and_two_libraries_keep_same_ids_independent(self):
+    def test_library_unifies_legacy_modes_once_and_keeps_conflicting_ids(self):
         with tempfile.TemporaryDirectory() as directory:
-            legacy=Path(directory)/'layouts.json'
-            legacy.write_text(json.dumps(SEEDS),encoding='utf-8')
-            llm=store.LayoutLibrary(legacy)
-            manual=store.LayoutLibrary(Path(directory)/'manual_layouts.json')
-            initial=llm.read()
-            self.assertEqual(len(initial['layouts']),len(SEEDS))
-            self.assertEqual(json.loads(legacy.read_text(encoding='utf-8')),SEEDS)
-            self.assertEqual(len(list(llm.directory.glob('layout-*.json'))),len(SEEDS))
-            self.assertEqual(len(json.loads(llm.index.read_text())['files']),len(SEEDS))
-            self.assertTrue(all(isinstance(json.loads(path.read_text(encoding='utf-8')),dict) for path in llm.directory.glob('layout-*.json')))
-            self.assertEqual(manual.read()['layouts'],[])
-            direct=copy.deepcopy(SEEDS[0]);direct['promptMode']='manual';direct['promptCaption']='Independent manual page.'
+            original=Path(directory)/'layouts.json'
+            original.write_text(json.dumps(SEEDS),encoding='utf-8')
+            old_bytes=original.read_bytes()
+            direct_path=Path(directory)/'manual_layouts.json'
+            direct=copy.deepcopy(SEEDS[0]);direct['promptMode']='manual';direct['promptCaption']='A quiet office.'
+            manual=store.LayoutLibrary(direct_path)
             manual.save([direct],manual.read()['revision'])
-            self.assertEqual(llm.get(direct['id']).get('promptMode','llm'),'llm')
-            self.assertEqual(manual.get(direct['id'])['promptMode'],'manual')
-            old_libraries=node.libraries
+            unified=store.LayoutLibrary(original,legacy_paths=[direct_path])
+            initial=unified.read()
+            self.assertEqual(len(initial['layouts']),len(SEEDS)+1)
+            self.assertEqual(original.read_bytes(),old_bytes)
+            self.assertEqual(len(list(unified.directory.glob('layout-*.json'))),len(SEEDS)+1)
+            self.assertTrue(unified.migration_marker.exists())
+            renamed=next(entry for entry in initial['layouts'] if entry.get('promptMode')=='manual')
+            self.assertTrue(renamed['id'].endswith('_manual'))
+            self.assertIn('A quiet office.',renamed['description'])
+            self.assertEqual(unified.read(),initial)
+            snapshot=core.dumps(renamed)
+            old_library=node.library
             try:
-                node.libraries={'llm':llm,'manual':manual}
-                self.assertEqual(node.selected(direct['id'],'','manual')['promptCaption'],'Independent manual page.')
-                self.assertNotIn('promptCaption',node.selected(direct['id'],'','llm'))
-            finally:node.libraries=old_libraries
-            llm.save([],initial['revision'])
-            self.assertEqual(list(llm.directory.glob('layout-*.json')),[])
-            self.assertEqual(llm.read()['layouts'],[])
-            self.assertEqual(len(manual.read()['layouts']),1)
+                node.library=unified
+                self.assertEqual(node.selected(renamed['id'],'','llm'),node.selected(renamed['id'],'','manual'))
+                unified.save([],initial['revision'])
+                self.assertEqual(unified.read()['layouts'],[])
+                self.assertEqual(node.selected(renamed['id'],snapshot)['description'],renamed['description'])
+                self.assertEqual(len(manual.read()['layouts']),1)
+            finally:node.library=old_library
 
     def test_individual_file_save_keeps_old_library_when_index_commit_fails(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -98,13 +110,13 @@ class LayoutChecks(unittest.TestCase):
         snapshot=core.dumps(layout)
         result=node().compile('This is retained as a separate LLM input.',layout['id'],snapshot)['result']
         compiled=json.loads(result[0]);self.assertEqual(result[1:],(1024,1024))
-        self.assertEqual(len(compiled['items']),5)
+        self.assertEqual(len(compiled['items']),6)
         self.assertEqual(compiled['items'][0]['bbox'],layout['panels'][0]['slots']['F'])
         first,second=compiled['items'][-2:]
         self.assertEqual([first['text'],second['text']],['资料齐了。','好的。'])
         self.assertLess(first['bbox'][2],second['bbox'][0])
         self.assertIn('large legible glyphs',first['caption'])
-        self.assertNotIn('LLM用途',result[0]);self.assertNotIn('开场格',result[0]);self.assertNotIn('slotContents',result[0])
+        self.assertIn('LLM用途',result[0]);self.assertIn('开场格',result[0]);self.assertNotIn('slotContents',result[0])
         llm=copy.deepcopy(layout);llm['promptMode']='llm'
         self.assertEqual(len(json.loads(node().compile(source(item(slot='F')),llm['id'],core.dumps(llm))['result'][0])['items']),1)
         self.assertEqual(json.loads(snapshot),layout)

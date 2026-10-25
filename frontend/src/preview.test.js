@@ -22,9 +22,9 @@ describe('standalone library import',()=>{
   it('copies per-frame purposes from the selected snapshot without coordinates or visible lettering',()=>{
     const selected={...layout,usage:'开场',panels:[{...layout.panels[0],slotNotes:{F:'介绍环境与人物关系'}}]};
     const note=purposeInstructions(selected);
-    expect(note).toContain('用途说明不是台词');
+    expect(note).toContain('画面描述本身不是台词');
     const data=JSON.parse(note.slice(note.indexOf('\n')+1));
-    expect(data).toMatchObject({layout:'page',usage:'开场',panels:[{panel:1,position:'one',slots:['F'],slotNotes:{F:'介绍环境与人物关系'}}]});
+    expect(data).toMatchObject({layout:'page',description:'开场',panels:[{panel:1,position:'one',slots:['F','X'],slotNotes:{F:'介绍环境与人物关系'}}]});
     expect(note).not.toContain('-500');
     expect(exportEntries([selected])[0].panels[0].slotNotes).toEqual(selected.panels[0].slotNotes);
   });

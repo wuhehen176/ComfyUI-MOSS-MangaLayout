@@ -24,7 +24,7 @@ export function editablePanel(rect: PanelRect, canvas: CanvasSize, source?: Mang
   if (source?.layer !== undefined) result.layer = source.layer;
   if (source?.position) result.position = source.position;
   for (const [key, [y1, x1, y2, x2]] of Object.entries((source ?? panelFromRect(rect, canvas, '')).slots)) {
-    if (key === 'F' || key === 'X') continue;
+    if (key === 'F') continue;
     setSlotRect(result, key, { x: x1 + canvas.width / 2, y: y1 + canvas.height / 2, width: x2 - x1, height: y2 - y1 });
   }
   for (const [key, points] of Object.entries(source?.shapes ?? {})) {

@@ -21,7 +21,6 @@ class MossMangaLayout:
         }, 'optional':{
             'layout_snapshot':('STRING', {'default':'', 'multiline':False}),
             'bleed':('INT', {'default':72, 'min':0, 'tooltip':'X 出框基准像素；按格数调整并裁到画布内。'}),
-            'library_mode':(['llm', 'manual'], {'default':'llm', 'tooltip':'分别选择 LLM 用途库或直接提示词库。'}),
         }}
 
     @classmethod
@@ -31,9 +30,7 @@ class MossMangaLayout:
             if layout['id'] != layout_id:
                 raise ValueError('节点选择与快照 id 不一致，请重新选择版式。')
             return layout
-        if library_mode not in ('llm', 'manual'):
-            raise ValueError('未知版式库类型。')
-        if cls.libraries is not None:
+        if cls.library is None and cls.libraries is not None:
             return cls.libraries[library_mode].get(layout_id)
         return cls.library.get(layout_id)
 

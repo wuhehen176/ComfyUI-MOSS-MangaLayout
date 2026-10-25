@@ -1,9 +1,11 @@
+import {sharedDescription} from './manga/layouts';
+
 export function formatEntry(value) {
   const {id,label,usage,readingOrder,canvas,promptMode,promptCaption}=value;
   if(!canvas||!id)throw new Error('版式缺少 id 或 canvas。');
   const panels=value.panels??value.portrait??value.landscape;
   if(!Array.isArray(panels)||!panels.length)throw new Error('版式缺少分格。');
-  return {id,label:label||id,usage:usage||'',readingOrder:readingOrder||'',canvas,panels,...(promptMode?{promptMode}:{}),...(typeof promptCaption==='string'?{promptCaption}:{})};
+  return {id,label:label||id,description:sharedDescription(value),usage:usage||'',readingOrder:readingOrder||'',canvas,panels,...(promptMode?{promptMode}:{}),...(typeof promptCaption==='string'?{promptCaption}:{})};
 }
 export function exportEntries(value) {
   const entries=Array.isArray(value)?value:value.layouts??[value];
@@ -12,8 +14,8 @@ export function exportEntries(value) {
 }
 export function purposeInstructions(value) {
   const layout=formatEntry(value);
-  const panels=layout.panels.map((panel,index)=>({panel:index+1,position:panel.position,slots:Object.keys(panel.slots),slotNotes:panel.slotNotes??{}}));
-  return '以下为当前所选版式的框用途说明，结合原文分配内容。F 说明整格用途，其余键只作用于对应内框；留空沿用槽位默认用途。用途说明不是台词、旁白或可见印字，不新增剧情事件、参与者、格子或槽位。\n'+JSON.stringify({layout:layout.id,usage:layout.usage,readingOrder:layout.readingOrder,panels},null,2);
+  const panels=layout.panels.map((panel,index)=>({panel:index+1,position:panel.position,slots:[...new Set([...Object.keys(panel.slots),...('F' in panel.slots?['X']:[])])],slotNotes:{...Object.fromEntries(Object.entries(panel.slotContents??{}).map(([key,entries])=>[key,entries.filter(item=>item.label!=='text').map(item=>item.caption).filter(Boolean).join('\n')]).filter(([,note])=>note)),...panel.slotNotes}}));
+  return '以下为当前所选版式的画面描述，结合原文分配内容。F 描述整格，其余键只作用于对应内框；留空沿用槽位默认含义。画面描述本身不是台词、旁白或可见印字，不新增剧情事件、参与者、格子或槽位。\n'+JSON.stringify({layout:layout.id,description:layout.description,readingOrder:layout.readingOrder,panels},null,2);
 }
 export function combinedInstructions(formatText,value) {
   return formatText.trim()+'\n\n'+purposeInstructions(value);
