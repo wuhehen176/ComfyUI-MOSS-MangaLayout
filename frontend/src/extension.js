@@ -58,6 +58,8 @@ function install(node) {
   const snapshot=node.widgets.find(widget=>widget.name==='layout_snapshot');
   if(!id||!snapshot)return;
   snapshot.type='hidden';snapshot.computeSize=()=>[0,-4];
+  const oldBleed=node.widgets.find(widget=>widget.name==='bleed');
+  if(oldBleed){oldBleed.type='hidden';oldBleed.computeSize=()=>[0,-4];}
   const mode=node.widgets.find(widget=>widget.name==='library_mode')??{value:'llm'};
   mode.type='hidden';mode.computeSize=()=>[0,-4];
   id.type='combo';id.options={...id.options,values:()=>[...new Set([...library.layouts.map(entry=>entry.id),id.value].filter(Boolean))]};
@@ -108,8 +110,8 @@ function install(node) {
     const control=document.createElement('button');control.textContent=label;control.type='button';control.style.cssText='padding:4px 7px;border:1px solid #7d8b9e;border-radius:4px;background:#344052;color:#fff;cursor:pointer';
     control.onclick=async()=>{try{await action();}catch(error){status.textContent=error.message;}};controls.append(control);
   }
-  button('编辑版式',()=>{const chosen=current();if(!chosen)throw new Error('先选择版式。');showEditor(chosen,select,chosen.promptMode??'llm',node.widgets.find(widget=>widget.name==='bleed')?.value??72);});
-  button('新建',()=>showEditor(null,select,'llm',node.widgets.find(widget=>widget.name==='bleed')?.value??72));
+  button('编辑版式',()=>{const chosen=current();if(!chosen)throw new Error('先选择版式。');showEditor(chosen,select,chosen.promptMode??'llm');});
+  button('新建',()=>showEditor(null,select,'llm'));
   button('删除',async()=>{
     const chosen=current();if(!chosen)throw new Error('先选择版式。');
     await saveLibrary(library.layouts.filter(entry=>entry.id!==chosen.id));
@@ -119,11 +121,11 @@ function install(node) {
   button('一键复制说明',async()=>{
     const chosen=current();if(!chosen)throw new Error('先选择版式。');
     const result=await request('format',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(chosen)});
-    await copyText(combinedInstructions(result.text,chosen));status.textContent='已复制格式转换＋当前快照的画面描述，可一起交给 LLM。';
+    await copyText(combinedInstructions(result.text,chosen));status.textContent='已复制内容整理要求和当前版式；交给 LLM 后可粘贴其 JSON 代码块，或含一个代码块的完整回复。';
   });
   button('复制手填提示词',async()=>{
     const chosen=current();if(!chosen)throw new Error('先选择版式。');
-    const result=await request('manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout:chosen,bleed:node.widgets.find(widget=>widget.name==='bleed')?.value??72})});
+    const result=await request('manual',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({layout:chosen})});
     await copyText(result.text);status.textContent='已复制 MOSS 提示词，可直接送入文本编码器。';
   });
   button('导出版式库',()=>{

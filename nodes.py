@@ -16,11 +16,10 @@ class MossMangaLayout:
     @classmethod
     def INPUT_TYPES(cls):
         return {'required':{
-            'layout_json':('STRING', {'multiline':True, 'default':'', 'tooltip':'LLM 输入模式自动识别普通画面提示词或单页 Layout JSON：普通文本作为整页描述，JSON 按 panel/slot 编译坐标。直接提示词模式使用编辑器保存的内容。'}),
+            'layout_json':('STRING', {'multiline':True, 'default':'', 'tooltip':'支持普通画面提示词、单页 Layout JSON，或含一个 JSON 代码块的 LLM 回复。JSON 按 panel/slot 编译，代码块外说明不进入生图。节点不调用 LLM。直接提示词模式使用编辑器保存的内容。'}),
             'layout_id':('STRING', {'default':'', 'tooltip':'节点选择优先，覆盖输入 JSON 中的 layout。'}),
         }, 'optional':{
             'layout_snapshot':('STRING', {'default':'', 'multiline':False}),
-            'bleed':('INT', {'default':72, 'min':0, 'tooltip':'X 出框基准像素；按格数调整并裁到画布内。'}),
         }}
 
     @classmethod

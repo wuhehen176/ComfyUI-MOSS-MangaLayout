@@ -63,6 +63,8 @@ def validate_layout(raw):
         if not isinstance(slots, dict) or not slots:
             raise ValueError(f'第 {index+1} 格缺少槽位。')
         for key, box in slots.items():
+            if isinstance(key, str) and slot_type(key) == 'X':
+                raise ValueError('X 槽位已移除，请将跨格主体放入 S 或编号主体框，并调整其实际坐标。')
             if not isinstance(key, str) or not re.fullmatch(r'[A-Z]+(?:_[1-9]\d*)?', key) or not isinstance(box, list) or len(box) != 4 or not all(integer(n) for n in box):
                 raise ValueError(f'第 {index+1} 格槽位格式错误。')
             top, left, bottom, right = box
@@ -113,7 +115,7 @@ def manual_source(layout):
         for slot, note in panel.get('slotNotes', {}).items():
             entries = panel.get('slotContents', {}).get(slot, [])
             if note and not any(entry['label'] != 'text' and entry['caption'].strip() == note for entry in entries):
-                label = 'character' if slot_type(slot) in ('S', 'L', 'R', 'X') else 'object'
+                label = 'character' if slot_type(slot) in ('S', 'L', 'R') else 'object'
                 panel_items.append({'panel':index+1, 'slot':slot, 'label':label, 'caption':note})
         for slot, entries in panel.get('slotContents', {}).items():
             for entry in entries:
@@ -206,18 +208,25 @@ def page_guide(layout, has_text=False):
 
 
 def compile_layout(layout_json, layout, bleed=72):
+    # Accept the legacy argument for old workflows; only actual slot geometry controls crossing.
     layout = validate_layout(layout)
     if not isinstance(layout_json, str) or not layout_json.strip():
         raise ValueError('请输入整页画面提示词，或含 summary/items 的 Layout JSON。')
     text = layout_json.strip()
-    if not text.startswith(('{', '[', '```')):
+    fences = re.findall(r'(?m)^[ \t]*```[^\r\n]*', text)
+    if fences:
+        block = re.search(r'^[ \t]*```(?:json)?[ \t]*\r?\n(.*?)^[ \t]*```[ \t]*(?:\r?\n|$)', text, re.M | re.S | re.I)
+        if len(fences) != 2 or not block:
+            raise ValueError('请提供一个完整的 JSON 代码块；多个代码块或未闭合的代码围栏需要先整理。')
+        text = block.group(1).strip()
+    if not fences and not text.startswith(('{', '[')):
         return page_guide(layout)+'\n\n'+layout_json
     try:
         root = json.loads(text, parse_constant=reject_constant)
     except (ValueError, TypeError) as error:
-        raise ValueError('输入已识别为 Layout JSON，但格式无法解析；请检查引号、换行和括号，并去掉代码围栏及外层包装。') from error
+        raise ValueError('输入已识别为 Layout JSON，但格式无法解析；请检查引号、换行、括号和 JSON 对象结构。') from error
     if not isinstance(root, dict) or not isinstance(root.get('summary'), dict) or not isinstance(root['summary'].get('caption'), str) or not root['summary']['caption'].strip():
-        raise ValueError('输入需要 summary.caption 和 items；请使用“复制格式转换说明”。')
+        raise ValueError('输入需要 summary.caption 和 items；可点击“一键复制说明”交给 LLM 生成。')
     if not isinstance(root.get('items'), list) or not root['items']:
         raise ValueError('items 需要非空数组。')
     panels, groups = layout['panels'], {}
@@ -233,12 +242,7 @@ def compile_layout(layout_json, layout, bleed=72):
             raise ValueError('每项需要有效的 label（object/character/text）和非空 caption。')
         if item['label'] == 'text' and (not isinstance(item.get('text'), str) or not item['text'].strip()):
             raise ValueError('文字项需要非空 text，不创建空气泡。')
-        if slot == 'X' and 'X' not in panel['slots'] and 'F' in panel['slots']:
-            margin = math.floor(bleed*(1.25 if len(panels)<=2 else 1 if len(panels)==3 else .8 if len(panels)==4 else .6)+.5)
-            top, left, bottom, right = panel['slots']['F']
-            box = [max(-layout['canvas']['height']//2, top-margin), max(-layout['canvas']['width']//2, left-margin), min(layout['canvas']['height']//2, bottom+margin), min(layout['canvas']['width']//2, right+margin)]
-        else:
-            box = panel['slots'].get(slot)
+        box = panel['slots'].get(slot)
         if box is None:
             raise ValueError(f'第 {index+1} 格没有 {slot} 槽位，可用：{" ".join(panel["slots"])}。')
         item['bbox'] = list(box)
@@ -277,15 +281,29 @@ def compile_layout(layout_json, layout, bleed=72):
 
 def format_instructions(layout):
     layout = validate_layout(layout)
-    slots = '\n'.join(f'{i+1}: '+ ' '.join(panel['slots']) + (' X' if 'F' in panel['slots'] and 'X' not in panel['slots'] else '') for i, panel in enumerate(layout['panels']))
-    return f'''只转换输出格式，保留现有描述、风格和准确文字字样，不增加或改写画面内容。
-每次直接输出一个单页 JSON 对象，不含 Markdown、代码围栏或说明文字。
-根字段使用 summary 和 items；summary.caption 是非空字符串，已有的 meta、canvas、palette 按原值保留。
-items 是非空数组；每项含 panel、slot、label、caption。panel 是从 1 起的整数；slot 必须来自下列对应格的清单。
-同类内框可有编号，例如 S、S_2 或 TL、TL_2；每个键对应独立区域，按清单完整填写，不能省略编号或自行创建未列出的键。编号不表示读序或新增人物。
-label 只能为 object、character 或 text；caption 是非空字符串。text 项另有非空 text 字符串，非文字项不加入 text。
-已有 tags、palette 按原值保留；tags、summary.meta 若存在，使用字符串数组。
-不输出 bbox、bbox_format、bbox_coord_space、width、height、layer 或 z-index，这些由节点处理。
-输入中的 layout 不负责选择版式，以节点选择为准。字符串换行使用合法 JSON 转义。
-当前版式共有 {len(layout['panels'])} 格，各格合法槽位：
+    slots = '\n'.join(f'{i+1}（position={panel["position"]}）: '+ ' '.join(panel['slots']) for i, panel in enumerate(layout['panels']))
+    return f'''请结合用户最新要求、原文及下方版式描述，整理成可用于 MOSS 的单页 Layout 内容提示词。节点只负责编译坐标，画面内容由你组织。
+
+【输出方式】
+先用 2～5 条简短说明列出实际改动、采用的必要假设或需要回编辑器调整的几何问题，只报告结论。
+随后输出且只输出一个标记为 json 的可复制代码块，代码块内放完整单页 JSON 对象。说明放在代码块外，JSON 内保持标准语法。
+
+【内容组织】
+保留既定人物身份、人数、事件、画风和准确台词；用户最新修订优先。可补充绘制所需的机位、景别、神态、姿态、衣物覆盖、支撑、接触、光照与遮挡关系，整合重复描述、纠正内部矛盾；不要仅逐句翻译或机械填表，也不按固定字数凑长。
+主要人物 caption 应足以交代身份、外观锚点、可见身体范围、姿态／动作和神态，环境项按实际需要简明描述。输入中已有的角色英文名和身份 tags 要绑定到对应人物，避免丢成泛指角色。
+同格同一人物优先合成一个主要 character 项，将脸、手、腿和表情等辅助框说明融入同一身体；确有独立局部项时明确它属于谁。多个区域不自动表示多个完整人物，多个字区也不表示必须补对白。
+槽位是可选的内容区域，不是必须逐项填满的配额。仅为有实际画面内容或准确文字的区域创建 item；未使用区域省略，勿输出“沿用默认含义”“辅助留白”“无新增元素”等占位 item。
+label 根据实际内容选择：人物为 character，背景／道具／装饰为 object，准确可见文字为 text。槽位名称只是区域标识；S 可承载装饰，BR 也可承载实际放在该处的道具，不能仅凭名称机械分类。
+跨格主体使用实际存在的 S 或编号主体框，描述同一连续身体跨越边框及其与背景的前后关系。若人物、桌椅或支撑位置互相矛盾，采用与用户最新要求一致的可绘制关系，并在代码块外说明；需要移动或增删框时明确告知，保留当前合法几何引用。
+情绪参考写成可见五官和动作；准确台词仅放 text，不在 caption 再抄一遍字样。一句台词只分配一次，字区按说话人和阅读路径选用，静默格保留画面空间。
+
+【JSON 契约】
+根字段使用 summary 和 items。summary.caption 是非空英文字符串，概括整页风格、共用环境／光照、准确格数和整数格号读序，避免重复逐项列举局部内容；已有 summary.meta、canvas、palette 按原值保留。
+items 是非空数组；每项含 panel、slot、label、caption。panel 是从 1 起的整数，slot 完整引用下列对应格清单，label 为 object、character 或 text，caption 使用非空英文字符串；用户另有描述语言要求时遵从用户。准确对白及已有可见字样保留原语言。
+text 项另有非空 text 字符串，其他项省略 text。已有 tags、palette 保留；tags、summary.meta 若存在，使用字符串数组。
+同类内框可有编号，例如 S、S_2 或 TL、TL_2；每个完整键对应独立区域。编号不表示读序或新增人物。只引用已列出的键。
+当前版式共有 {len(layout['panels'])} 格，panel 按下方清单从 1 起顺序阅读。position 是稳定别名，其中的数字不是格号；summary 与 items 都使用实际整数格号。
+bbox、bbox_format、bbox_coord_space、width、height、layer、z-index 由节点处理，输出内容中省略这些字段。输入中的 layout 不负责选择版式，以节点选择为准。字符串换行使用合法 JSON 转义。
+
+【当前版式：格号与合法槽位】
 {slots}'''

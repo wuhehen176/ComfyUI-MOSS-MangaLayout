@@ -32,7 +32,9 @@ describe('standalone library import',()=>{
     const note=purposeInstructions(selected);
     expect(note).toContain('画面描述本身不是台词');
     const data=JSON.parse(note.slice(note.indexOf('\n')+1));
-    expect(data).toMatchObject({layout:'page',description:'开场',panels:[{panel:1,position:'one',slots:['F','X'],slotNotes:{F:'介绍环境与人物关系'}}]});
+    expect(data).toMatchObject({layout:'page',description:'开场',panels:[{panel:1,position:'one',slots:['F'],slotNotes:{F:'介绍环境与人物关系'}}]});
+    expect(note).toContain('未使用区域省略');
+    expect(note).not.toContain('"X"');
     expect(note).not.toContain('-500');
     expect(exportEntries([selected])[0].panels[0].slotNotes).toEqual(selected.panels[0].slotNotes);
   });

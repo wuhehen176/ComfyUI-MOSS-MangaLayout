@@ -60,9 +60,6 @@ if getattr(PromptServer, 'instance', None) is not None:
         try:
             body = await request.json()
             layout = validate_layout(body['layout'])
-            bleed = body.get('bleed', 72)
-            if not isinstance(bleed, int) or isinstance(bleed, bool) or not 0 <= bleed <= 8192:
-                raise ValueError('出框像素需要 0～8192 的整数。')
-            return web.json_response({'text':compile_layout(manual_source(layout), layout, bleed)})
+            return web.json_response({'text':compile_layout(manual_source(layout), layout)})
         except (ValueError, TypeError, AttributeError, KeyError) as error:
             return web.json_response({'error':str(error)}, status=400)

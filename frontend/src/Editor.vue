@@ -29,7 +29,7 @@ const undoStack = ref<string[]>([]), redoStack = ref<string[]>([]);
 const baseline = ref('');
 const current = computed(() => doc.value.panels[selected.value]);
 const activeRect = computed(() => current.value ? selectedSlot.value && current.value.slots[selectedSlot.value] ? slotRect(current.value, selectedSlot.value) : current.value : null);
-const slotLabels: Record<string,string> = { C:'内区', S:'主体', T:'顶部文字', B:'底部文字', TL:'左上文字', TR:'右上文字', BL:'左下文字', BR:'右下文字', L:'左人物', R:'右人物', O:'道具/音效', ML:'左侧文字', MR:'右侧文字', E:'有限越线', X:'出框区' };
+const slotLabels: Record<string,string> = { C:'内区', S:'主体', T:'顶部文字', B:'底部文字', TL:'左上文字', TR:'右上文字', BL:'左下文字', BR:'右下文字', L:'左人物', R:'右人物', O:'道具/音效', ML:'左侧文字', MR:'右侧文字', E:'有限越线' };
 const newSlot = ref('S');
 const availableSlots = computed(() => current.value ? ['C','S','T','B','TL','TR','BL','BR','ML','MR','L','R','O'] : []);
 const slotToAdd = computed(() => availableSlots.value.includes(newSlot.value) ? newSlot.value : availableSlots.value[0] ?? '');
@@ -80,7 +80,7 @@ function addSlot(): void {
   selectSlot(selected.value,key);
 }
 function resetSlots(): void {
-  if (current.value) edit(() => { const panel=current.value!; panel.slots = {...editablePanel(panel, canvas.value).slots,...(panel.slots.X?{X:panel.slots.X}:{})}; panel.corners = Object.fromEntries(Object.entries(panel.corners).filter(([key])=>key==='F'||key==='X')); selectedSlot.value = ''; });
+  if (current.value) edit(() => { const panel=current.value!; panel.slots = {...editablePanel(panel, canvas.value).slots}; panel.corners = Object.fromEntries(Object.entries(panel.corners).filter(([key])=>key==='F')); selectedSlot.value = ''; });
 }
 function visibleSlots(panel: EditablePanel, index: number): { key: string; rect: PanelRect }[] {
   if (!slotsPreview.value) return [];

@@ -28,6 +28,25 @@ def item(panel=1, slot='S', **extra):
 
 
 class LayoutChecks(unittest.TestCase):
+    def test_single_json_code_block_is_extracted_and_explanation_is_not_image_content(self):
+        layout=SEEDS[0];raw=source(item(slot='S',caption='An adult at a wooden desk.'))
+        reply='调整说明：合并主体，并保留原台词。\n\n```json\n'+raw+'\n```\n\n说明结束。'
+        expected=core.compile_layout(raw,layout)
+        self.assertEqual(core.compile_layout(reply,layout),expected)
+        self.assertEqual(core.compile_layout('```\n'+raw+'\n```',layout),expected)
+        self.assertNotIn('调整说明',core.compile_layout(reply,layout))
+        for bad in ('```json\n'+raw,'```json\n'+raw+'\n```\n```json\n'+raw+'\n```','```python\n'+raw+'\n```','```json\nA quiet office.\n```','```json\n{"summary":\n```'):
+            with self.assertRaises(ValueError):core.compile_layout(bad,layout)
+
+    def test_x_is_removed_and_legacy_bleed_does_not_change_s_geometry(self):
+        layout=copy.deepcopy(SEEDS[0])
+        with self.assertRaisesRegex(ValueError,'没有 X'):core.compile_layout(source(item(slot='X')),layout)
+        self.assertNotIn('bleed',node.INPUT_TYPES()['optional'])
+        self.assertEqual(core.compile_layout(source(item(slot='S')),layout,bleed=0),core.compile_layout(source(item(slot='S')),layout,bleed=800))
+        for key in ('X','X_2'):
+            legacy=copy.deepcopy(layout);legacy['panels'][0]['slots'][key]=legacy['panels'][0]['slots']['F']
+            with self.assertRaisesRegex(ValueError,'X 槽位已移除'):core.validate_layout(legacy)
+
     def test_numbered_slots_keep_coordinates_roles_text_and_library_data_independent(self):
         layout={'id':'repeated','canvas':{'width':1024,'height':1024},'panels':[{'position':'one','slots':{'F':[-400,-400,400,400],'S':[-250,-300,250,-20],'S_2':[-450,10,300,450],'TL':[-380,-380,-280,-100],'TL_2':[-240,-380,-40,-100]},'slotNotes':{'S_2':'An adult colleague at the right.'}}]}
         given=[item(slot='S_2'),item(slot='TL',label='text',caption='First.',text='第一句。'),item(slot='TL_2',label='text',caption='Next.',text='第二句。'),item(slot='TL_2',label='text',caption='Last.',text='第三句。')]
@@ -215,7 +234,7 @@ class LayoutChecks(unittest.TestCase):
         self.assertEqual(a['bbox'][1::2],b['bbox'][1::2])
         self.assertEqual(len(result['items']),2)
 
-    def test_shape_layers_and_bleed(self):
+    def test_shape_layers_and_cross_panel_s(self):
         layout=copy.deepcopy(SEEDS[0])
         frame=layout['panels'][0]['slots']['F']
         top,left,bottom,right=frame
@@ -223,7 +242,8 @@ class LayoutChecks(unittest.TestCase):
         layout['panels'][1]['slots']['F']=frame.copy()
         layout['panels'][0]['layer']=10
         layout['panels'][1]['layer']=0
-        result=json.loads(core.compile_layout(source(item(slot='X')),layout))
+        layout['panels'][0]['slots']['S']=[-layout['canvas']['height']//2,-layout['canvas']['width']//2,layout['canvas']['height']//2,layout['canvas']['width']//2]
+        result=json.loads(core.compile_layout(source(item(slot='S')),layout))
         caption=result['summary']['caption']
         self.assertIn('panel 1 is in front of panel 2',caption)
         self.assertIn('clockwise corners xy',caption)
@@ -266,7 +286,13 @@ class LayoutChecks(unittest.TestCase):
         self.assertIn('TL',text)
         self.assertIn('BR',text)
         self.assertNotIn('jacket',text)
-        self.assertIn('不增加或改写画面内容',text)
+        self.assertIn('可补充绘制所需',text)
+        self.assertIn('可复制代码块',text)
+        self.assertIn('未使用区域省略',text)
+        self.assertIn('合成一个主要 character 项',text)
+        self.assertIn('position=',text)
+        self.assertIn('其中的数字不是格号',text)
+        self.assertNotIn(' X',text)
 
 
 if __name__=='__main__':
