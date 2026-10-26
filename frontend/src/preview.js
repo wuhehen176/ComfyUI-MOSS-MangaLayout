@@ -15,7 +15,7 @@ export function exportEntries(value) {
 export function purposeInstructions(value) {
   const layout=formatEntry(value);
   const panels=layout.panels.map((panel,index)=>({panel:index+1,position:panel.position,slots:Object.keys(panel.slots),slotNotes:{...Object.fromEntries(Object.entries(panel.slotContents??{}).map(([key,entries])=>[key,entries.filter(item=>item.label!=='text').map(item=>item.caption).filter(Boolean).join('\n')]).filter(([,note])=>note)),...panel.slotNotes}}));
-  return '以下为当前所选版式的画面描述，请结合用户最新要求和原文分配内容。F 描述整格，其余键是内容定位参考。槽位按需要选用，未使用区域省略，不补占位项；槽位类型名称不等于人物数量或强制内容类型，以实际描述和坐标为准。画面描述本身不是台词、旁白或可见印字；明确提供的准确字样另填 text。可整合同一人物的局部描述，并补充镜头、姿态、表情、支撑和遮挡关系；保留既定事件、身份、人数与准确台词。\n'+JSON.stringify({layout:layout.id,description:layout.description,readingOrder:layout.readingOrder,panels},null,2);
+  return '以下为当前所选版式的画面描述，请结合用户最新要求和原文分配内容。F 描述整格，其余键是内容定位参考。槽位按需要选用，未使用区域省略，不补占位项；明确承担抓握、衣袖、饰品、局部出框或接触定位的辅助槽位，分别保留引用对应完整 slot 的局部 item，不能仅并入主体 caption 后省略。主体项写整体姿态，局部项写角色归属、部位、连接、接触与遮挡，描述保持一致；多个 item 不等于多个人物。槽位名称不强制规定内容类型。画面描述本身不是台词、旁白或可见印字；明确提供的准确字样另填 text。保留既定事件、身份、人数与准确台词。下方只含槽位清单和画面描述，不含完整画布坐标与 shapes；仅凭这段信息不能确认几何没有冲突，需要结合额外提供的实际几何或回编辑器核对。\n'+JSON.stringify({layout:layout.id,description:layout.description,readingOrder:layout.readingOrder,panels},null,2);
 }
 export function combinedInstructions(formatText,value) {
   return formatText.trim()+'\n\n'+purposeInstructions(value);

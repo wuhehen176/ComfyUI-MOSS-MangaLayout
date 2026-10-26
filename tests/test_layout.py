@@ -289,7 +289,7 @@ class LayoutChecks(unittest.TestCase):
         self.assertIn('可补充绘制所需',text)
         self.assertIn('可复制代码块',text)
         self.assertIn('未使用区域省略',text)
-        self.assertIn('合成一个主要 character 项',text)
+        self.assertIn('一个主要 character 项',text)
         self.assertIn('position=',text)
         self.assertIn('其中的数字不是格号',text)
         self.assertNotIn(' X',text)
