@@ -91,10 +91,21 @@ npm run build
 
 ## 参考漫画图反推 skill（通用版）
 
-也可直接将[参考图反推规范](docs/ComfyUI-MOSS漫画节点-参考图反推说明.txt)与参考图一起交给能看图的 agent，生成可导入的版式 JSON。规范包含稳定角色编号、斜框四角与格间留白、局部出框、多尺度人物展示，以及复杂姿势的主体框＋局部辅助定位；反推版式与生图内容 JSON 是两种不同格式。
+详细规则统一维护在 skill 随包的[反推核心规则](skills/moss-comic-reference-layout/references/layout-rules.md)。skill 负责执行流程，反推前会要求读取这份规则；[可复制 TXT](docs/ComfyUI-MOSS漫画节点-参考图反推说明.txt)由同一文件生成，可直接与参考图交给普通看图 LLM。两种用法遵循同一套角色编号、斜框、局部辅助定位与跨格规则，缺省行为以核心规则为准，用户要求优先。
 
 [moss-comic-reference-layout](skills/moss-comic-reference-layout/SKILL.md) 可指导能看图的 agent，从漫画参考图生成可编辑版式、各框用途及内容提示词，也可按要求替换人物和用已有 MOSS 工作流测试。
 
 支持 SKILL.md 的 agent 按各自方式安装整个 `skills/moss-comic-reference-layout` 文件夹；其他 agent 可读取完整文件夹后按说明执行。详见[跨电脑与跨 agent 使用说明](skills/使用说明.md)。skill 不绑定本机路径、端口、模型或工作流节点 ID；实际试跑需要使用者提供自己的环境。
 
 本仓库包含节点源代码、已编译前端、两套普通场景示例和通用 skill。示例只需本节点即可编译；完整采样仍须使用者自己的 MOSS 工作流。验证范围见[验证记录](验证记录.md)，代码来源见[NOTICE](NOTICE.md)。
+
+## 维护反推规则
+
+只编辑 `skills/moss-comic-reference-layout/references/layout-rules.md`，再生成独立 TXT；不要分别维护两份规则。生成与检查均只使用 Python 标准库：
+
+```text
+python scripts/export_reference_guide.py
+python scripts/export_reference_guide.py --check
+```
+
+仅安装整个 skill 文件夹也可读取完整核心规则；导出脚本只用于维护仓库的 TXT，不是运行 skill 的依赖。程序内“一键复制说明”继续负责实际槽位清单和内容 JSON 契约，与参考图反推的版式阶段分开。
