@@ -253,6 +253,20 @@ class LayoutChecks(unittest.TestCase):
         self.assertGreaterEqual(box[2],bottom)
         self.assertGreaterEqual(box[0],-layout['canvas']['height']/2)
 
+    def test_frame_overlap_uses_real_contours_and_ignores_boundary_contact(self):
+        cases=json.loads((ROOT/'tests/fixtures/frame-overlap.json').read_text(encoding='utf-8'))
+        for case in cases:
+            with self.subTest(case=case['name']):
+                panels=[dict(panel,position=f'panel-{i+1}',layer=i) for i,panel in enumerate(case['panels'])]
+                layout=core.validate_layout({'id':'overlap','canvas':{'width':1024,'height':1024},'panels':panels})
+                before=copy.deepcopy(layout)
+                self.assertEqual(core.frames_overlap(*panels),case['overlap'])
+                self.assertEqual(core.frames_overlap(*reversed(panels)),case['overlap'])
+                guide=core.page_guide(layout)
+                self.assertEqual('panel 2 is in front of panel 1' in guide,case['overlap'])
+                self.assertEqual('Stacking:' in guide,case['overlap'])
+                self.assertEqual(layout,before)
+
     def test_bad_geometry_json_and_empty_text(self):
         layout=copy.deepcopy(SEEDS[0])
         layout['panels'][0]['slots']['S']=[0,0,0,0]

@@ -328,6 +328,24 @@ function framePosition([top,left,bottom,right]: FrameBox, canvas: ResolvedLayout
   return fullHeight ? `full-height ${horizontal}` : fullWidth ? `full-width ${vertical}` : `${vertical}-${horizontal}`;
 }
 
+/** Positive-area intersection of convex frame outlines (separating axes). */
+function framesOverlap(first: MangaPanel, second: MangaPanel): boolean {
+  const polygons: number[][][] = [];
+  for (const panel of [first, second]) {
+    const box = panel.slots.F;
+    if (!box) return false;
+    const [top,left,bottom,right] = box;
+    polygons.push(panel.shapes?.F ?? [[left,top],[right,top],[right,bottom],[left,bottom]]);
+  }
+  for (const points of polygons) for (let i=0;i<points.length;i++) {
+    const [x,y]=points[i], [nextX,nextY]=points[(i+1)%points.length];
+    const axisX=y-nextY, axisY=nextX-x;
+    const [a,b]=polygons.map(polygon=>polygon.map(([px,py])=>px*axisX+py*axisY));
+    if (Math.min(Math.max(...a),Math.max(...b))<=Math.max(Math.min(...a),Math.min(...b))) return false;
+  }
+  return true;
+}
+
 /** Pairwise overlap constraints; layer is plugin metadata, never an invented MOSS field. */
 export function panelLayerGuides(panels: MangaPanel[], target?: MangaPanel): string[] {
   const ordered = panels.map((panel,index)=>({panel,index})).sort((a,b)=>(a.panel.layer ?? a.index)-(b.panel.layer ?? b.index) || a.index-b.index);
@@ -335,8 +353,7 @@ export function panelLayerGuides(panels: MangaPanel[], target?: MangaPanel): str
   for (let i=0;i<ordered.length;i++) for (let j=i+1;j<ordered.length;j++) {
     const back=ordered[i], front=ordered[j];
     if (target && target!==back.panel && target!==front.panel) continue;
-    const a=back.panel.slots.F, b=front.panel.slots.F;
-    if (!a || !b || a[0]>=b[2] || b[0]>=a[2] || a[1]>=b[3] || b[1]>=a[3]) continue;
+    if (!framesOverlap(back.panel,front.panel)) continue;
     guides.push(`panel ${front.index+1} is in front of panel ${back.index+1}`);
   }
   return guides;

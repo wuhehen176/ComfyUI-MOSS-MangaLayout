@@ -175,6 +175,25 @@ def frame_position(box, canvas):
     return f'full-height {horizontal}' if full_height else f'full-width {vertical}' if full_width else f'{vertical}-{horizontal}'
 
 
+def frames_overlap(first, second):
+    """Positive-area intersection of convex frame outlines (separating axes)."""
+    polygons = []
+    for panel in (first, second):
+        box = panel['slots'].get('F')
+        if not box:
+            return False
+        top, left, bottom, right = box
+        polygons.append(panel.get('shapes', {}).get('F') or [[left, top], [right, top], [right, bottom], [left, bottom]])
+    for points in polygons:
+        for index, (x, y) in enumerate(points):
+            next_x, next_y = points[(index+1) % len(points)]
+            axis_x, axis_y = y-next_y, next_x-x
+            a, b = [[px*axis_x+py*axis_y for px, py in polygon] for polygon in polygons]
+            if min(max(a), max(b)) <= max(min(a), min(b)):
+                return False
+    return True
+
+
 def page_guide(layout, has_text=False):
     panels, frames, relations = layout['panels'], [], []
     for i, panel in enumerate(panels):
@@ -192,8 +211,7 @@ def page_guide(layout, has_text=False):
     ordered = sorted(range(len(panels)), key=lambda i:(panels[i].get('layer', i), i))
     for rank, back in enumerate(ordered):
         for front in ordered[rank+1:]:
-            a, b = panels[back]['slots'].get('F'), panels[front]['slots'].get('F')
-            if a and b and a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]:
+            if frames_overlap(panels[back], panels[front]):
                 relations.append(f'panel {front+1} is in front of panel {back+1}')
     lines = [f'Page frame guide: exactly {len(panels)} distinct comic panels; preserve the specified frames without additional subdivisions.', 'All frame coordinates below are centered pixels.', '; '.join(frames)+'.']
     if relations:

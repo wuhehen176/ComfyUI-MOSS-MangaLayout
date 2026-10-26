@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import overlapCases from '../../../tests/fixtures/frame-overlap.json';
 import {
   applyMangaFrames,
   buildMangaSpec,
   mangaDefaults,
   normalizeManga,
+  panelLayerGuides,
   parseCustomLayout,
   resolveLayouts,
   type MangaSettings,
+  type MangaPanel,
 } from '@/manga/layouts';
 
 const PORTRAIT = { width: 1088, height: 1920 };
@@ -17,6 +20,18 @@ function settingsWith(patch: Partial<MangaSettings> = {}): MangaSettings {
 }
 
 describe('applyMangaFrames', () => {
+  it('外框按实际凸四边形检测重叠，边线或角点接触不生成遮挡',()=>{
+    for (const sample of overlapCases) {
+      const panels=sample.panels.map((panel,i)=>({...panel,position:`panel-${i+1}`,layer:i})) as MangaPanel[];
+      const expected=sample.overlap ? ['panel 2 is in front of panel 1'] : [];
+      const before=JSON.stringify(panels);
+      expect(panelLayerGuides(panels),sample.name).toEqual(expected);
+      expect(panelLayerGuides(panels,panels[0]),sample.name).toEqual(expected);
+      expect(panelLayerGuides(panels,panels[1]),sample.name).toEqual(expected);
+      expect(panelLayerGuides(panels,{position:'other',slots:{}}),sample.name).toEqual([]);
+      expect(JSON.stringify(panels)).toBe(before);
+    }
+  });
   it('BL/BR 使用独立坐标，不再共同回落到 B，没有字区时拒绝',()=>{
     for (const slot of ['BL','BR']) {
       const manga=settingsWith();
