@@ -10,6 +10,15 @@ describe('standalone library import',()=>{
   it('rejects missing geometry',()=>{
     expect(()=>formatEntry({id:'empty'})).toThrow();
   });
+  it('preserves the corner toggle through editor export, import and explicit disabling',()=>{
+    for(const enabled of [true,false]) {
+      const exported=formatEntry({...layout,useBboxCorners:enabled,panels:undefined,portrait:layout.panels});
+      expect(exported.useBboxCorners).toBe(enabled);
+      expect(exportEntries(JSON.parse(JSON.stringify({layouts:[exported]})))[0].useBboxCorners).toBe(enabled);
+    }
+    expect(formatEntry(layout).useBboxCorners).toBeUndefined();
+    expect(()=>formatEntry({...layout,useBboxCorners:'false'})).toThrow(/布尔值/);
+  });
   it('编号字区保留完整名称、独立描述，并显示在预览中',()=>{
     const selected={...layout,panels:[{...layout.panels[0],slots:{...layout.panels[0].slots,TL:[-450,-450,-300,-100],TL_2:[-250,-450,-100,-100]},slotNotes:{TL:'第一句',TL_2:'第二句'}}]};
     const text=purposeInstructions(selected);expect(text).toContain('"TL_2"');expect(text).toContain('第二句');

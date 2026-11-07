@@ -2,7 +2,7 @@ import { app } from '../../scripts/app.js';
 import { api } from '../../scripts/api.js';
 import { createApp } from 'vue';
 import Editor from './Editor.vue';
-import { combinedInstructions, exportEntries, formatEntry, renderPreview } from './preview.js';
+import { combinedInstructions, exportEntries, formatEntry, renderPreview, writeLayoutFile } from './preview.js';
 
 let library={layouts:[],revision:''};
 const listeners=new Set();
@@ -26,6 +26,7 @@ async function saveLibrary(layouts) {
 function showEditor(selected,onSave,mode) {
   const host=document.createElement('div');document.body.append(host);
   let editing;
+  let editingId=selected?.id;
   const close=()=>{editing.unmount();host.remove();};
   editing=createApp(Editor,{
     sources:[...(selected?[selected]:[]),...library.layouts.filter(layout=>layout.id!==selected?.id)].map(layout=>({...layout,key:layout.id})),
@@ -33,13 +34,13 @@ function showEditor(selected,onSave,mode) {
     initialMode:mode,
     initialKey:selected?.id,editingId:selected?.id,
     onClose:close,
-    onSave:async value=>{
+    onSave:async (value,keepOpen=false,done)=>{
       try {
         const saved=formatEntry(value);
         const found=library.layouts.some(entry=>entry.id===saved.id);
-        if(found && saved.id!==selected?.id) throw new Error('版式库已有此 ID，请改名或打开该版式编辑。');
+        if(found && saved.id!==editingId) throw new Error('版式库已有此 ID，请改名或打开该版式编辑。');
         await saveLibrary(found ? library.layouts.map(entry=>entry.id===saved.id?saved:entry) : [...library.layouts,saved]);
-        onSave(saved);close();
+        editingId=saved.id;onSave(saved);done?.();if(!keepOpen)close();
       } catch(error) {window.alert(error.message);}
     },
   });
@@ -129,8 +130,12 @@ function install(node) {
     await copyText(result.text);status.textContent='已复制 MOSS 提示词，可直接送入文本编码器。';
   });
   button('导出版式库',()=>{
-    const url=URL.createObjectURL(new Blob([JSON.stringify({layouts:library.layouts},null,2)],{type:'application/json'}));
+    const url=URL.createObjectURL(new Blob([writeLayoutFile(library.layouts)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download='moss-manga-layouts.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  });
+  button('导出旧版兼容文件',()=>{
+    const url=URL.createObjectURL(new Blob([writeLayoutFile(library.layouts,{legacy:true})],{type:'application/json'}));
+    const link=document.createElement('a');link.href=url;link.download='moss-manga-legacy.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
   button('导出当前版式',()=>{
     const chosen=current();if(!chosen)throw new Error('先选择版式。');

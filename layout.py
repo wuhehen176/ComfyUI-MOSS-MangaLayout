@@ -35,7 +35,27 @@ def validate_layout(raw):
     if not isinstance(raw, dict) or not isinstance(raw.get('id'), str) or not raw['id'].strip():
         raise ValueError('版式需要非空 id。')
     layout = copy.deepcopy(raw)
+    # Old Skill exports remain valid; retain the unused orientation on disk.
+    if 'panels' not in layout:
+        canvas=layout.get('canvas') or ({'width':1088,'height':1920} if layout.get('portrait') else {'width':1920,'height':1088})
+        if not isinstance(canvas,dict) or not all(integer(canvas.get(k)) for k in ('width','height')): raise ValueError('画布格式错误。')
+        direction='landscape' if canvas['width']>canvas['height'] else 'portrait'
+        layout['canvas']=canvas
+        layout['panels']=layout.get(direction)
+    for key in ('omitFullPageFrame','omitSmallFrames'):
+        if key in layout and not isinstance(layout[key],bool):
+            raise ValueError(f'{key} 需要布尔值。')
+    canvas=layout.get('canvas',{})
+    if isinstance(canvas,dict) and all(integer(canvas.get(k)) for k in ('width','height')):
+        primary='landscape' if canvas['width']>canvas['height'] else 'portrait'
+        if primary in layout and layout[primary]!=layout.get('panels'):
+            raise ValueError('panels 与对应方向内容冲突，请明确保留哪个版本。')
+        other='portrait' if primary=='landscape' else 'landscape'
+        if other in layout:
+            validate_layout({'id':layout['id'],'canvas':{'width':canvas['height'],'height':canvas['width']},'panels':layout[other]})
     layout['id'] = layout['id'].strip()
+    if 'useBboxCorners' in layout and not isinstance(layout['useBboxCorners'], bool):
+        raise ValueError('使用 BBOX 角点需要布尔值 true 或 false。')
     if layout.get('promptMode', 'llm') not in ('llm', 'manual'):
         raise ValueError('提示词模式需要 llm 或 manual。')
     if 'promptCaption' in layout and not isinstance(layout['promptCaption'], str):
@@ -59,6 +79,7 @@ def validate_layout(raw):
         positions.add(panel['position'])
         if 'layer' in panel and not integer(panel['layer']):
             raise ValueError('遮挡层级需要整数。')
+        if 'locked' in panel and not isinstance(panel['locked'],bool): raise ValueError('锁定状态需要布尔值。')
         slots = panel.get('slots')
         if not isinstance(slots, dict) or not slots:
             raise ValueError(f'第 {index+1} 格缺少槽位。')
@@ -194,13 +215,53 @@ def frames_overlap(first, second):
     return True
 
 
+def slanted_quad(points):
+    return bool(points) and any(x != points[(i+1)%4][0] and y != points[(i+1)%4][1]
+                                for i, (x, y) in enumerate(points))
+
+
+def frame_corner_items(layout):
+    """Experimental native-bbox anchors for the four turns of a slanted frame."""
+    if not layout.get('useBboxCorners', False):
+        return []
+    items = []
+    width, height = layout['canvas']['width'], layout['canvas']['height']
+    for index, panel in enumerate(layout['panels']):
+        points = panel.get('shapes', {}).get('F')
+        if index in omitted_frames(layout) or not slanted_quad(points):
+            continue
+        for corner, (x, y) in enumerate(points):
+            # 16-pixel anchors are clipped at canvas edges, not moved inwards.
+            box = [max(-height//2, math.floor(y-8)), max(-width//2, math.floor(x-8)),
+                   min(height//2, math.ceil(y+8)), min(width//2, math.ceil(x+8))]
+            items.append({'label':'object', 'caption':
+                f'Panel {index+1} outer border, corner {corner+1} of 4 in clockwise order. '
+                f'A tiny section of the same continuous frame outline, joining the straight edges toward corners {(corner-1)%4+1} and {(corner+1)%4+1}. '
+                'This bbox locates the border junction; connect the four junctions into the single existing frame.', 'bbox':box})
+    return items
+
+
+def omitted_frames(layout):
+    w,h=layout['canvas']['width']/2,layout['canvas']['height']/2
+    result=set()
+    for i,panel in enumerate(layout['panels']):
+        box=panel['slots'].get('F')
+        if not box: continue
+        points=panel.get('shapes',{}).get('F',[[box[1],box[0]],[box[3],box[0]],[box[3],box[2]],[box[1],box[2]]])
+        full=all(any(abs(x-a)<=1 and abs(y-b)<=1 for x,y in points) for a,b in [(-w,-h),(w,-h),(w,h),(-w,h)])
+        if layout.get('omitFullPageFrame' if full else 'omitSmallFrames',False): result.add(i)
+    return result
+
+
 def page_guide(layout, has_text=False):
     panels, frames, relations = layout['panels'], [], []
+    omitted=omitted_frames(layout)
     for i, panel in enumerate(panels):
+        if i in omitted: continue
         box = panel['slots'].get('F', panel['slots'].get('C'))
         line = f'panel {i+1}' + (f' ({frame_position(box, layout["canvas"])}), outer frame yxyx [{", ".join(map(str, box))}]' if box else ' (no outer frame specified)')
-        if 'F' in panel.get('shapes', {}):
-            line += '; clockwise corners xy ' + dumps(panel['shapes']['F'])
+        if layout.get('useBboxCorners', False) and slanted_quad(panel.get('shapes', {}).get('F')):
+            line += '; outer contour follows its four clockwise corner-bbox items'
         if box:
             for slot, region in panel['slots'].items():
                 if slot_type(slot) not in ('S', 'L', 'R'):
@@ -213,13 +274,15 @@ def page_guide(layout, has_text=False):
         for front in ordered[rank+1:]:
             if frames_overlap(panels[back], panels[front]):
                 relations.append(f'panel {front+1} is in front of panel {back+1}')
-    lines = [f'Page frame guide: exactly {len(panels)} distinct comic panels; preserve the specified frames without additional subdivisions.', 'All frame coordinates below are centered pixels.', '; '.join(frames)+'.']
+    lines = ([('Frame guide for the listed regions:' if omitted else f'Page frame guide: exactly {len(panels)} distinct comic panels; preserve the specified frames without additional subdivisions.'), 'All frame coordinates below are centered pixels.', '; '.join(frames)+'.'] if frames else [])
     if relations:
         lines.append('Stacking: '+'; '.join(relations)+'. Front frames occlude rear frames only in their overlap; the rear scene continues behind them. Overlays and inset panels do not split the rear frame into extra panels.')
-    lines.extend([
-        'Reading sequence: '+' then '.join(f'panel {i+1}' for i in range(len(panels)))+'; stacking does not change this sequence.',
-        'Each item belongs to its named panel; its bbox is a content region, not another comic frame. Only explicitly described border overlaps may extend outside that panel. Panel references and layout instructions are not visible lettering.',
-    ])
+    if frame_corner_items(layout):
+        lines.append('The four corner-bbox items of each slanted outer frame locate its border junctions in clockwise order. Join these locations with straight frame edges. They belong to the existing frame count; corner labels are layout instructions rather than visible lettering.')
+    if not omitted or len(panels)>1: lines.append(
+        'Reading sequence: '+' then '.join(f'panel {i+1}' for i in range(len(panels)))+'; stacking does not change this sequence.')
+    if not omitted: lines.append(
+        'Each item belongs to its named panel; its bbox is a content region, not another comic frame. Only explicitly described border overlaps may extend outside that panel. Panel references and layout instructions are not visible lettering.')
     if has_text:
         lines.append('Visible lettering follows the supplied text items and their assigned regions. Preserve each item\'s exact wording and described container. Text placement can overlap secondary clothing while keeping faces, key hand gestures, contact points and important props clearly visible.')
     return ' '.join(lines)
@@ -238,6 +301,10 @@ def compile_layout(layout_json, layout, bleed=72):
             raise ValueError('请提供一个完整的 JSON 代码块；多个代码块或未闭合的代码围栏需要先整理。')
         text = block.group(1).strip()
     if not fences and not text.startswith(('{', '[')):
+        anchors = frame_corner_items(layout)
+        if anchors:
+            return dumps({'summary':{'canvas':'multi_panel', 'caption':page_guide(layout)+' '+layout_json},
+                          'items':anchors, 'bbox_coord_space':'abs_centralized', 'bbox_format':'yxyx'})
         return page_guide(layout)+'\n\n'+layout_json
     try:
         root = json.loads(text, parse_constant=reject_constant)
@@ -265,7 +332,7 @@ def compile_layout(layout_json, layout, bleed=72):
             raise ValueError(f'第 {index+1} 格没有 {slot} 槽位，可用：{" ".join(panel["slots"])}。')
         item['bbox'] = list(box)
         caption = re.sub(r'^\s*panel\s+\d+\s*[,;:]\s*', '', item['caption'], flags=re.I)
-        item['caption'] = f'Content of panel {index+1}: {caption}'.strip()
+        item['caption'] = caption if len(panels)==1 and index in omitted_frames(layout) else f'Content of panel {index+1}: {caption}'.strip()
         if item['label'] == 'text':
             if slot_type(slot) in TEXT_REGIONS:
                 item['caption'] += f' Placement: {TEXT_REGIONS[slot_type(slot)]} text region.'
@@ -293,6 +360,7 @@ def compile_layout(layout_json, layout, bleed=72):
             item['caption'] += f' Text {index+1} of {count} in this region, read from top to bottom.'
     root.pop('layout', None)
     root['summary']['caption'] = page_guide(layout, any(item['label'] == 'text' for item in root['items']))+' '+root['summary']['caption']
+    root['items'].extend(frame_corner_items(layout))
     root['bbox_coord_space'], root['bbox_format'] = 'abs_centralized', 'yxyx'
     return dumps(root)
 

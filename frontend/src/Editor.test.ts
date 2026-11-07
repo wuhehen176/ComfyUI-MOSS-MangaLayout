@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createRenderer, defineComponent, nextTick, ssrContextKey } from 'vue';
 import Editor from './Editor.vue';
-import { quadPoints } from '@/manga/editor';
+import { quadPoints,slotRect,containsPoint,drawRect,textSlot } from '@/manga/editor';
 
 // 在 Vue 活跃组件中执行实际 setup/指针处理器；画布只替换测量与捕获接口。
 function editor(props: Record<string,unknown> = {}) {
@@ -29,6 +29,23 @@ function editor(props: Record<string,unknown> = {}) {
 }
 
 describe('版式编辑器 Ctrl 角点交互',()=>{
+  it('角点开关默认关闭，可撤销重做并随保存和重新载入保留',()=>{
+    const {state,events,close}=editor();
+    expect(state.doc.value.useBboxCorners).toBe(false);
+    state.changeBboxCorners({target:{checked:true}});
+    expect(state.doc.value.useBboxCorners).toBe(true);
+    state.undo();expect(state.doc.value.useBboxCorners).toBe(false);
+    state.redo();expect(state.doc.value.useBboxCorners).toBe(true);
+    state.changePromptMode('manual');state.changePromptMode('llm');
+    state.save();const saved=events.at(-1)[1];
+    expect(saved.useBboxCorners).toBe(true);
+    const loaded=editor({editingId:saved.id,sources:[{...saved,key:'saved',panels:saved.portrait??saved.landscape}]});
+    loaded.state.sourceKey.value='saved';loaded.state.loadSource();
+    expect(loaded.state.doc.value.useBboxCorners).toBe(true);
+    loaded.state.changeBboxCorners({target:{checked:false}});loaded.state.save();
+    expect(loaded.events.at(-1)[1].useBboxCorners).toBe(false);
+    loaded.close();close();
+  });
   it('同类内框可重复添加，各自描述、内容、坐标与形变独立保存，删除可撤销',()=>{
     const {state,events,close}=editor();
     const original=JSON.stringify(state.doc.value.panels[0].slots.S);
@@ -346,5 +363,115 @@ describe('版式编辑器 Ctrl 角点交互',()=>{
       }
       close();
     }
+  });
+});
+
+
+describe('编辑工作台快捷操作',()=>{
+  it('多选内框和外框后批量移动、复制、锁定与删除均保留几何及撤销',()=>{
+    const {state,close}=editor();state.add();
+    state.chooseRegion(0,'');state.chooseRegion(1,'',true);
+    expect(state.selectedRegions.value).toHaveLength(2);
+    state.chooseRegion(1,'',true);expect(state.selected.value).toBe(0);state.chooseRegion(1,'',true);
+    const before=JSON.stringify(state.doc.value.panels);
+    state.keydown({key:'ArrowRight',target:{matches:()=>false},preventDefault:()=>{}});
+    expect(JSON.stringify(state.doc.value.panels)).not.toBe(before);state.undo();
+    expect(JSON.stringify(state.doc.value.panels)).toBe(before);
+    state.chooseRegion(0,'');state.chooseRegion(1,'',true);state.duplicateSelection();
+    expect(state.doc.value.panels).toHaveLength(4);state.lockSelected();state.deleteSelection();
+    expect(state.doc.value.panels).toHaveLength(4);
+    state.chooseRegion(2,'');state.chooseRegion(3,'',true);state.lockSelected();state.deleteSelection();
+    expect(state.doc.value.panels).toHaveLength(2);state.undo();expect(state.doc.value.panels).toHaveLength(4);close();
+  });
+  it('Ctrl+S 发出保留编辑器的保存请求，只有保存回调才更新基线',()=>{
+    const {state,events,close}=editor();const previous=state.baseline.value;state.save(true);
+    const event=events.at(-1);expect(event[0]).toBe('save');expect(event[2]).toBe(true);expect(state.baseline.value).toBe(previous);
+    event[3]();expect(state.baseline.value).toBe(state.snapshot());expect(events.some(e=>e[0]==='close')).toBe(false);close();
+  });
+});
+
+
+function pointer(x:number,y:number,id=21) {
+  return {button:0,pointerId:id,clientX:x,clientY:y,ctrlKey:false,altKey:true,shiftKey:false,preventDefault:()=>{},stopPropagation:()=>{}};
+}
+function draw(state:any,kind:string,parent:number,start:number[],end:number[]) {
+  state.contextMenu.value={parent,hits:[],x:0,y:0,height:800};
+  state.startDraw(kind);state.drawDown(pointer(start[0],start[1]));
+  state.move(pointer(end[0],end[1]));state.end(pointer(end[0],end[1]));
+}
+describe('右键拖绘与临时聚焦',()=>{
+  it('拖绘F无默认内框，一次操作只产生一条撤销，可反向绘制且不修改旧格',()=>{
+    const {state,close}=editor();state.snap.value=false;
+    const original=JSON.stringify(state.doc.value.panels[0]),count=state.undoStack.value.length;
+    draw(state,'F',-1,[600,700],[200,300]);
+    expect(state.doc.value.panels).toHaveLength(2);
+    expect(state.doc.value.panels[1]).toMatchObject({x:200,y:300,width:400,height:400,slots:{}});
+    expect(JSON.stringify(state.doc.value.panels[0])).toBe(original);
+    expect(state.undoStack.value.length).toBe(count+1);expect(state.drawTool.value).toBeNull();
+    state.undo();expect(state.doc.value.panels).toHaveLength(1);state.redo();expect(state.doc.value.panels).toHaveLength(2);close();
+  });
+  it('在分格内创建S/O/文字自动归所属F，跨格拖绘及重复编号保留独立区域',()=>{
+    const {state,events,close}=editor();state.snap.value=false;state.add();
+    const first=JSON.stringify(state.doc.value.panels[0]);
+    const second=state.doc.value.panels[1];Object.assign(second,{x:300,y:300,width:400,height:400});
+    draw(state,'S',1,[10,10],[900,900]);expect(state.selected.value).toBe(1);expect(state.selectedSlot.value).toBe('S');
+    expect(slotRect(second,'S')).toEqual({x:10,y:10,width:890,height:890});
+    draw(state,'S',1,[500,400],[650,650]);expect(state.selectedSlot.value).toBe('S_2');
+    draw(state,'O',1,[500,500],[550,550]);expect(second.slots.O).toBeDefined();
+    draw(state,'text',1,[520,320],[650,390]);expect(second.slots.TR).toBeDefined();
+    draw(state,'text',1,[520,320],[650,390]);expect(second.slots.TR_2).toBeDefined();
+    expect(JSON.stringify(state.doc.value.panels[0])).toBe(first);
+    state.save();const result=events.at(-1)[1];expect(result.portrait[1].slots.S_2).toBeDefined();expect(result.portrait[1].slots.TR_2).toBeDefined();close();
+  });
+  it('缩放和平移后按SVG真实位置换算，反向和越出画布裁到有效范围',()=>{
+    const {state,close}=editor();state.snap.value=false;
+    state.svg.value.getBoundingClientRect=()=>({left:-120,top:-60,width:512,height:512});
+    draw(state,'F',-1,[80,140],[-70,-10]);expect(state.doc.value.panels[1]).toMatchObject({x:100,y:100,width:300,height:300});
+    expect(drawRect({x:100,y:100},{x:2000,y:-90},{width:1024,height:1024})).toEqual({x:100,y:0,width:924,height:100});close();
+  });
+  it('Esc、pointercancel和误点不写入文档，不添加撤销或关闭编辑器',()=>{
+    const {state,events,close}=editor(),before=state.snapshot(),undos=state.undoStack.value.length;
+    state.startDraw('F');state.drawDown(pointer(100,100));state.move(pointer(500,500));
+    state.keydown({key:'Escape',preventDefault:()=>{},stopPropagation:()=>{}});
+    expect(state.snapshot()).toBe(before);expect(state.drawPreview.value).toBeNull();expect(state.drawTool.value).toBeNull();
+    state.startDraw('F');state.drawDown(pointer(100,100));state.end(pointer(600,600),true);
+    draw(state,'F',-1,[100,100],[101,101]);
+    expect(state.snapshot()).toBe(before);expect(state.undoStack.value.length).toBe(undos);expect(events).toEqual([]);close();
+  });
+  it('没有所属F或F已锁定时不创建内框；开始后父格消失时不产生孤立槽位',()=>{
+    const {state,close}=editor();state.snap.value=false;
+    state.selectPanel(-1);state.startDraw('O');expect(state.drawTool.value).toBeNull();
+    state.doc.value.panels[0].locked=true;state.contextMenu.value={parent:0};state.startDraw('S');expect(state.drawTool.value).toBeNull();
+    state.doc.value.panels[0].locked=false;state.startDraw('S');state.drawDown(pointer(100,100));state.doc.value.panels=[];state.end(pointer(500,500));
+    expect(state.doc.value.panels).toEqual([]);expect(state.error.value).toContain('所属分格');close();
+  });
+  it('选中被盖住的F或其内框会临时置前，实际层级、读序、撤销记录及保存输出完全不变',()=>{
+    const {state,events,close}=editor();state.add();state.doc.value.panels[0].layer=0;state.doc.value.panels[1].layer=9;
+    state.selectPanel(-1);state.save();const output=JSON.stringify(events.at(-1)[1]);
+    const before=state.snapshot(),undoCount=state.undoStack.value.length;
+    state.selectPanel(0);expect(state.displayed.value.map((p:any)=>p.index)).toEqual([1,0]);expect(state.drawn.value.map((p:any)=>p.index)).toEqual([0,1]);expect(state.selectedLayer.value).toBe(0);
+    state.selectSlot(0,'S');expect(state.displayed.value.at(-1).index).toBe(0);
+    expect(state.snapshot()).toBe(before);expect(state.undoStack.value.length).toBe(undoCount);
+    state.save();expect(JSON.stringify(events.at(-1)[1])).toBe(output);
+    state.selectPanel(-1);expect(state.displayed.value.map((p:any)=>p.index)).toEqual([0,1]);close();
+  });
+  it('在斜框右键按实际四边形命中；菜单能选择被完全遮挡的框',()=>{
+    const {state,close}=editor();state.add();
+    const p=state.doc.value.panels[0];Object.assign(p,{x:0,y:0,width:200,height:200});p.slots={};p.corners.F=[[.5,0],[1,.5],[.5,1],[0,.5]];
+    expect(containsPoint(p,'F',{x:10,y:10})).toBe(false);expect(containsPoint(p,'F',{x:100,y:100})).toBe(true);
+    Object.assign(state.doc.value.panels[1],{x:0,y:0,width:200,height:200});
+    vi.stubGlobal('window',{innerWidth:1000,innerHeight:800});
+    try {
+      state.menu(pointer(10,10),1);expect(state.contextMenu.value.hits.some((r:any)=>r.panel===0)).toBe(false);
+      state.menu(pointer(100,100),1);expect(state.contextMenu.value.hits.map((r:any)=>r.panel)).toContain(0);
+      state.chooseHit({panel:0,slot:''});expect(state.selected.value).toBe(0);expect(state.contextMenu.value).toBeNull();expect(state.displayed.value.at(-1).index).toBe(0);
+    } finally {vi.unstubAllGlobals();close();}
+  });
+  it('文字按实际位置选槽，横向通栏使用T/B，中部使用ML/MR',()=>{
+    const p={x:0,y:0,width:600,height:900};
+    expect(textSlot(p,{x:30,y:20,width:540,height:100})).toBe('T');
+    expect(textSlot(p,{x:30,y:780,width:540,height:100})).toBe('B');
+    expect(textSlot(p,{x:10,y:400,width:100,height:100})).toBe('ML');
+    expect(textSlot(p,{x:480,y:400,width:100,height:100})).toBe('MR');
   });
 });

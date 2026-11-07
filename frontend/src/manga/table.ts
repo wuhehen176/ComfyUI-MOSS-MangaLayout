@@ -20,6 +20,7 @@ export interface ManualContent {
 }
 
 export interface MangaPanel {
+  locked?:boolean;
   /** 该格在版式里的位置代号,如 single / top-left / right-main。 */
   position: string;
   /** 绘制层级，越大越靠前；省略时使用面板数组顺序。与阅读顺序独立。 */
@@ -35,7 +36,10 @@ export interface MangaPanel {
 }
 
 export interface MangaLayoutDef {
+  omitFullPageFrame?:boolean;
+  omitSmallFrames?:boolean;
   label: string;
+  useBboxCorners?: boolean;
   promptMode?: 'llm' | 'manual';
   promptCaption?: string;
   /** 这套版式适合什么节拍：拼进提示词清单，直接引导模型挑选。 */

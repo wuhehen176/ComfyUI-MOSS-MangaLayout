@@ -1,14 +1,18 @@
 import {sharedDescription,slotType} from './manga/layouts';
+import {portableLayout,readLayoutFile,writeLayoutFile} from './manga/portable';
+export {writeLayoutFile};
 
 export function formatEntry(value) {
-  const {id,label,usage,readingOrder,canvas,promptMode,promptCaption}=value;
+  value=portableLayout(value);
+  const {id,label,usage,readingOrder,canvas,promptMode,promptCaption,useBboxCorners}=value;
+  if(useBboxCorners!==undefined && typeof useBboxCorners!=='boolean')throw new Error('使用 BBOX 角点需要布尔值 true 或 false。');
   if(!canvas||!id)throw new Error('版式缺少 id 或 canvas。');
   const panels=value.panels??value.portrait??value.landscape;
   if(!Array.isArray(panels)||!panels.length)throw new Error('版式缺少分格。');
-  return {id,label:label||id,description:sharedDescription(value),usage:usage||'',readingOrder:readingOrder||'',canvas,panels,...(promptMode?{promptMode}:{}),...(typeof promptCaption==='string'?{promptCaption}:{})};
+  return {...value,id,label:label||id,description:sharedDescription(value),usage:usage||'',readingOrder:readingOrder||'',canvas,panels,...(promptMode?{promptMode}:{}),...(typeof useBboxCorners==='boolean'?{useBboxCorners}:{}),...(typeof promptCaption==='string'?{promptCaption}:{})};
 }
 export function exportEntries(value) {
-  const entries=Array.isArray(value)?value:value.layouts??[value];
+  const entries=readLayoutFile(value).layouts;
   if(!Array.isArray(entries))throw new Error('导入需要版式数组。');
   return entries.map(formatEntry);
 }

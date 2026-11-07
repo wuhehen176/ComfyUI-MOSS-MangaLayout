@@ -1,3 +1,4 @@
+import { directionalLayout } from './portable';
 import { MANGA_TABLE } from '@/manga/table';
 import type { FrameBox, MangaLayoutDef, MangaOrientation, MangaPanel, ManualContent } from '@/manga/table';
 
@@ -37,7 +38,10 @@ export interface MangaSettings {
 
 /** 设置页可管理的一条版式;两个方向可以各自缺省。 */
 export interface MangaCustomLayout {
+  omitFullPageFrame?:boolean;
+  omitSmallFrames?:boolean;
   id: string;
+  useBboxCorners?: boolean;
   description?: string;
   promptMode?: 'llm' | 'manual';
   promptCaption?: string;
@@ -116,6 +120,8 @@ export function resolveLayouts(manga: MangaSettings, orientation: MangaOrientati
       readingOrder: override?.readingOrder?.trim() || def.readingOrder,
       panels: override?.[orientation]?.length ? override[orientation]! : def.panels.map(withBottomTextSlots),
       promptMode: override?.promptMode,
+      omitFullPageFrame:override?.omitFullPageFrame,omitSmallFrames:override?.omitSmallFrames,
+      useBboxCorners: override?.useBboxCorners,
       promptCaption: override?.promptCaption,
       description: override?.description,
     });
@@ -131,6 +137,8 @@ export function resolveLayouts(manga: MangaSettings, orientation: MangaOrientati
       readingOrder: entry.readingOrder?.trim() || '',
       panels,
       promptMode: entry.promptMode,
+      omitFullPageFrame:entry.omitFullPageFrame,omitSmallFrames:entry.omitSmallFrames,
+      useBboxCorners: entry.useBboxCorners,
       promptCaption: entry.promptCaption,
       description: entry.description,
     });
@@ -441,6 +449,7 @@ export function parseCustomLayout(text: string): MangaCustomLayout {
   } catch (error) {
     throw new Error(`JSON 解析失败:${error instanceof Error ? error.message : String(error)}`);
   }
+  parsed=directionalLayout(parsed as Record<string,unknown>);
   const entry = normalizeCustom(parsed);
   if (!entry) {
     throw new Error('需要形如 {"id":"my_layout","label":"…","portrait":[{"position":"…","slots":{"F":[y1,x1,y2,x2]}}]}');
@@ -449,12 +458,14 @@ export function parseCustomLayout(text: string): MangaCustomLayout {
     throw new Error('portrait 与 landscape 至少要有一个方向的面板');
   }
   const source = parsed as Record<string, unknown>;
+  for (const key of ['omitFullPageFrame','omitSmallFrames','useBboxCorners']) if(source[key]!==undefined && typeof source[key]!=='boolean') throw new Error(`${key} 需要布尔值。`);
+  if (source.useBboxCorners !== undefined && typeof source.useBboxCorners !== 'boolean') throw new Error('使用 BBOX 角点需要布尔值 true 或 false。');
   if (source.canvas !== undefined && !normalizeCanvas(source.canvas)) throw new Error('画布宽高必须是 64～8192 的偶数。');
   for (const orientation of ['portrait', 'landscape'] as const) {
     if (source[orientation] === undefined) continue;
     const panels = source[orientation];
-    const canvas = entry.canvas ?? canvasOf(orientation);
-    if (entry.canvas && orientationOf(canvas.width, canvas.height) !== orientation) throw new Error('面板方向与自定义画布宽高不符。');
+    const canvas = entry.canvas ? (orientationOf(entry.canvas.width,entry.canvas.height)===orientation ? entry.canvas : {width:entry.canvas.height,height:entry.canvas.width}) : canvasOf(orientation);
+    if (entry.canvas && canvas.width!==canvas.height && orientationOf(canvas.width, canvas.height) !== orientation) throw new Error('面板方向与自定义画布宽高不符。');
     const positions = new Set<string>();
     if (!Array.isArray(panels) || !panels.length) throw new Error(`${orientation}:需要非空面板数组。`);
     for (const rawPanel of panels) {
@@ -465,6 +476,13 @@ export function parseCustomLayout(text: string): MangaCustomLayout {
       if (panel?.layer !== undefined && !Number.isSafeInteger(panel.layer)) throw new Error(`${orientation}/${position}:层级必须为安全整数。`);
       if (!panel?.slots || typeof panel.slots !== 'object' || !Object.keys(panel.slots).length) {
         throw new Error(`${orientation}/${position}:需要槽位坐标。`);
+      }
+      if (panel?.locked!==undefined && typeof panel.locked!=='boolean') throw new Error(`${orientation}/${position}:锁定状态需要布尔值。`);
+      if (panel?.slotContents!==undefined) {
+        if (!panel.slotContents || typeof panel.slotContents!=='object' || Array.isArray(panel.slotContents)) throw new Error(`${orientation}/${position}:手填内容格式错误。`);
+        for (const [slot,entries] of Object.entries(panel.slotContents)) {
+          if (!panel.slots[slot] || !Array.isArray(entries) || entries.some(item=>!item || !['object','character','text'].includes(item.label) || typeof item.caption!=='string' || (item.text!==undefined && typeof item.text!=='string') || (item.textType!==undefined && !['dialogue','narration','sfx'].includes(item.textType)))) throw new Error(`${orientation}/${position}/${slot}:手填内容或文字类型无效。`);
+        }
       }
       for (const [slot, rawBox] of Object.entries(panel.slots)) {
         const box = normalizeBox(rawBox);
@@ -527,7 +545,7 @@ function normalizePanels(raw: unknown): MangaPanel[] | undefined {
         if (slots[slot] && Array.isArray(value)) slotContents[slot] = JSON.parse(JSON.stringify(value));
       }
     }
-    if (Object.keys(slots).length) out.push({ position, slots, ...(Number.isSafeInteger(panel.layer) ? { layer:panel.layer } : {}), ...(Object.keys(shapes).length ? { shapes } : {}), ...(Object.keys(slotNotes).length ? { slotNotes } : {}), ...(Object.keys(slotContents).length ? { slotContents } : {}) });
+    if (Object.keys(slots).length) out.push({ position, slots, ...(panel.locked===true ? {locked:true} : {}), ...(Number.isSafeInteger(panel.layer) ? { layer:panel.layer } : {}), ...(Object.keys(shapes).length ? { shapes } : {}), ...(Object.keys(slotNotes).length ? { slotNotes } : {}), ...(Object.keys(slotContents).length ? { slotContents } : {}) });
   }
   return out.length ? out : undefined;
 }
@@ -545,7 +563,7 @@ function normalizeCustom(raw: unknown): MangaCustomLayout | null {
   // 只改用途或名称、不动坐标的覆盖条目也合法：panels 会回落到内置表
   if (!portrait && !landscape && !label && !usage && !readingOrder) return null;
   const canvas = normalizeCanvas(entry.canvas);
-  return { id, label, usage, readingOrder, portrait, landscape, ...(canvas ? { canvas } : {}), ...(entry.promptMode ? { promptMode:entry.promptMode } : {}), ...(typeof entry.promptCaption === 'string' ? { promptCaption:entry.promptCaption } : {}), ...(typeof entry.description === 'string' ? { description:entry.description } : {}) };
+  return { id, label, usage, readingOrder, portrait, landscape, ...(typeof entry.omitFullPageFrame==='boolean'?{omitFullPageFrame:entry.omitFullPageFrame}:{}),...(typeof entry.omitSmallFrames==='boolean'?{omitSmallFrames:entry.omitSmallFrames}:{}), ...(canvas ? { canvas } : {}), ...(entry.promptMode ? { promptMode:entry.promptMode } : {}), ...(typeof entry.useBboxCorners === 'boolean' ? { useBboxCorners:entry.useBboxCorners } : {}), ...(typeof entry.promptCaption === 'string' ? { promptCaption:entry.promptCaption } : {}), ...(typeof entry.description === 'string' ? { description:entry.description } : {}) };
 }
 
 export function sharedDescription(value: {description?: unknown; usage?: unknown; promptCaption?: unknown}): string {

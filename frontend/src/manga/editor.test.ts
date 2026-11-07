@@ -136,7 +136,9 @@ describe('快捷版式坐标与保存', () => {
     expect(custom.canvas).toEqual(canvas);
     expect(Object.keys(panel.slots)).toEqual(['F','C','S','T','B','TL','TR','BL','BR','ML','MR','L','R','O']);
     expect(() => parseCustomLayout(JSON.stringify({ ...custom, canvas: { width: 1599, height: 900 } }))).toThrow(/偶数/);
-    expect(() => parseCustomLayout(JSON.stringify({ ...custom, canvas: { width: 900, height: 1600 } }))).toThrow(/方向/);
+    const alternate = parseCustomLayout(JSON.stringify({ ...custom, canvas: { width: 900, height: 1600 } }));
+    expect(alternate.canvas).toEqual({ width: 900, height: 1600 });
+    expect(alternate.landscape).toEqual(custom.landscape);
   });
 
   it('按邻格边缘吸附，同时保持框内尺寸和最小分格', () => {

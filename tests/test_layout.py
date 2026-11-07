@@ -74,7 +74,9 @@ class LayoutChecks(unittest.TestCase):
         self.assertEqual(core.validate_layout(legacy)['description'],'Office\n\nWarm light.')
 
     def test_plain_prompt_and_json_are_detected_without_changing_manual_mode(self):
-        layout=copy.deepcopy(SEEDS[0]);before=copy.deepcopy(layout)
+        layout=copy.deepcopy(SEEDS[0])
+        for panel in layout['panels']:panel.pop('shapes',None)
+        before=copy.deepcopy(layout)
         plain='A full-color comic in a quiet office.\n第一格：成年人在桌边递出文件；第二格：对方点头。'
         result=node().compile(plain,layout['id'],core.dumps(layout))['result']
         self.assertTrue(result[0].endswith(plain))
@@ -236,6 +238,7 @@ class LayoutChecks(unittest.TestCase):
 
     def test_shape_layers_and_cross_panel_s(self):
         layout=copy.deepcopy(SEEDS[0])
+        layout['useBboxCorners']=True
         frame=layout['panels'][0]['slots']['F']
         top,left,bottom,right=frame
         layout['panels'][0].setdefault('shapes',{})['F']=[[left+10,top],[right,top],[right,bottom],[left,bottom]]
@@ -246,12 +249,84 @@ class LayoutChecks(unittest.TestCase):
         result=json.loads(core.compile_layout(source(item(slot='S')),layout))
         caption=result['summary']['caption']
         self.assertIn('panel 1 is in front of panel 2',caption)
-        self.assertIn('clockwise corners xy',caption)
+        self.assertIn('four clockwise corner-bbox items',caption)
+        self.assertNotIn('clockwise corners xy',caption)
         self.assertIn('Reading sequence: panel 1 then panel 2',caption)
         box=result['items'][0]['bbox']
         self.assertLessEqual(box[0],top)
         self.assertGreaterEqual(box[2],bottom)
         self.assertGreaterEqual(box[0],-layout['canvas']['height']/2)
+
+    def test_slanted_outer_frame_gets_four_native_corner_boxes_once(self):
+        points=[[-512,-512],[512,-400],[400,512],[-512,400]]
+        layout={'id':'corners','useBboxCorners':True,'canvas':{'width':1024,'height':1024},'panels':[
+            {'position':'one','slots':{'F':[-512,-512,512,512],'S':[-400,-400,400,400]},'shapes':{'F':points}},
+            {'position':'two','slots':{'F':[-300,-300,300,300]},'shapes':{'F':[[-300,-300],[300,-300],[300,300],[-300,300]]}}]}
+        before=copy.deepcopy(layout)
+        given=source(item(),item(caption='The same person, a closer view.'))
+        output=json.loads(core.compile_layout(given,layout))
+        self.assertEqual(len(output['items']),6)
+        self.assertEqual(output['items'][0]['bbox'],layout['panels'][0]['slots']['S'])
+        anchors=output['items'][2:]
+        self.assertEqual([a['bbox'] for a in anchors],[[-512,-512,-504,-504],[-408,504,-392,512],[504,392,512,408],[392,-512,408,-504]])
+        for index, anchor in enumerate(anchors):
+            self.assertEqual(set(anchor),{'label','caption','bbox'})
+            self.assertEqual(anchor['label'],'object')
+            self.assertIn(f'Panel 1 outer border, corner {index+1} of 4',anchor['caption'])
+            top,left,bottom,right=anchor['bbox'];x,y=points[index]
+            self.assertTrue(left<=x<=right and top<=y<=bottom)
+            self.assertTrue(0<right-left<=16 and 0<bottom-top<=16)
+        self.assertIn('exactly 2 distinct comic panels',output['summary']['caption'])
+        self.assertNotIn('clockwise corners xy',output['summary']['caption'])
+        self.assertEqual(layout,before)
+        self.assertEqual(core.compile_layout(given,layout),core.compile_layout(given,layout))
+
+    def test_corner_boxes_also_compile_plain_and_manual_inputs(self):
+        layout={'id':'corner-inputs','useBboxCorners':True,'description':'A quiet full-color room.','canvas':{'width':1024,'height':1024},'panels':[
+            {'position':'one','slots':{'F':[-400,-400,400,400]},'shapes':{'F':[[-400,-400],[400,-300],[400,400],[-400,400]]},
+             'slotContents':{'F':[{'label':'object','caption':'A wooden chair.'}]}}]}
+        plain='A quiet full-color room.\nOne person reading.'
+        output=json.loads(core.compile_layout(plain,layout))
+        self.assertTrue(output['summary']['caption'].endswith(plain))
+        self.assertEqual(len(output['items']),4)
+        self.assertEqual(output['items'][0]['bbox'],[-408,-408,-392,-392])
+        self.assertEqual((output['bbox_coord_space'],output['bbox_format']),('abs_centralized','yxyx'))
+        manual=json.loads(core.compile_layout(core.manual_source(layout),layout))
+        self.assertEqual(len(manual['items']),5)
+        self.assertIn('A wooden chair.',manual['items'][0]['caption'])
+        self.assertEqual(manual['items'][1:],output['items'])
+        layout['panels'][0].pop('shapes')
+        self.assertEqual(len(json.loads(core.compile_layout(core.manual_source(layout),layout))['items']),1)
+        self.assertTrue(core.compile_layout(plain,layout).endswith(plain))
+
+    def test_corner_switch_defaults_off_and_survives_library_snapshot_and_all_inputs(self):
+        layout={'id':'switch','description':'A quiet office.','canvas':{'width':1024,'height':1024},'panels':[
+            {'position':'one','slots':{'F':[-400,-400,400,400]},'shapes':{'F':[[-400,-400],[400,-300],[400,400],[-400,400]]},'slotNotes':{'F':'A wooden desk.'}}]}
+        hashes=[]
+        with tempfile.TemporaryDirectory() as directory:
+            library=store.LayoutLibrary(Path(directory)/'layouts.json')
+            for enabled in (None,False,True):
+                with self.subTest(enabled=enabled):
+                    selected=copy.deepcopy(layout)
+                    if enabled is not None:selected['useBboxCorners']=enabled
+                    library.save([selected],library.read()['revision'])
+                    saved=library.get('switch')
+                    self.assertEqual(saved.get('useBboxCorners'),enabled)
+                    output=json.loads(core.compile_layout(source(item(slot='F')),saved))
+                    manual=json.loads(core.compile_layout(core.manual_source(saved),saved))
+                    self.assertEqual(len(output['items']),5 if enabled else 1)
+                    self.assertEqual(len(manual['items']),5 if enabled else 1)
+                    self.assertEqual('corner-bbox' in output['summary']['caption'],bool(enabled))
+                    plain=core.compile_layout('A quiet office.',saved)
+                    self.assertEqual(plain.startswith('{'),bool(enabled))
+                    snapshot=core.dumps(saved)
+                    result=node().compile(source(item(slot='F')),'switch',snapshot)['result'][0]
+                    self.assertEqual(json.loads(result),output)
+                    hashes.append(node.IS_CHANGED('', 'switch',snapshot))
+            self.assertNotEqual(hashes[1],hashes[2])
+        for invalid in ('false',0,1,None):
+            with self.assertRaisesRegex(ValueError,'布尔值'):
+                core.validate_layout(dict(layout,useBboxCorners=invalid))
 
     def test_frame_overlap_uses_real_contours_and_ignores_boundary_contact(self):
         cases=json.loads((ROOT/'tests/fixtures/frame-overlap.json').read_text(encoding='utf-8'))
