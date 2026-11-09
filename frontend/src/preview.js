@@ -1,9 +1,11 @@
-import {sharedDescription,slotType} from './manga/layouts';
+import {parseCustomLayout,sharedDescription,slotType} from './manga/layouts';
 import {portableLayout,readLayoutFile,writeLayoutFile} from './manga/portable';
 export {writeLayoutFile};
 
 export function formatEntry(value) {
   value=portableLayout(value);
+  // Imports and editor saves use the same validation before reaching the server.
+  parseCustomLayout(JSON.stringify(value));
   const {id,label,usage,readingOrder,canvas,promptMode,promptCaption,useBboxCorners}=value;
   if(useBboxCorners!==undefined && typeof useBboxCorners!=='boolean')throw new Error('使用 BBOX 角点需要布尔值 true 或 false。');
   if(!canvas||!id)throw new Error('版式缺少 id 或 canvas。');

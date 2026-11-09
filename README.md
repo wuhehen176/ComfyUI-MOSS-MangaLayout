@@ -75,14 +75,16 @@ X 虚拟槽和出框像素控件已移除，跨格主体统一使用实际 S 或
 Python 编译与持久化仅使用标准库；运行时路由复用 ComfyUI 自带 aiohttp。前端已编译到 `web/`，普通安装无需 Node.js。
 
 ```powershell
-python -m unittest discover -s tests -v
-cd frontend
-npm install
-node check.mjs
-npm run build
+npm --prefix frontend ci --ignore-scripts
+python -B scripts/check.py --build
+git config core.hooksPath .githooks
 ```
 
-`tests/export-seed.cjs` 是首次本地迁移脚本，不在运行时读取酒馆设置。前端也可设置 `MOSS_BUILD_DEPENDENCIES` 指向已有依赖项目的 `package.json`，复用本机依赖进行编译。
+`scripts/check.py` 依次检查文件大小、Python 测试、反推说明同步、前端测试和 TypeScript 类型；`--build` 另行更新 `web/`。前端也可设置 `MOSS_BUILD_DEPENDENCIES` 指向已有依赖项目的 `package.json`，复用本机依赖。CI 使用锁文件安装依赖并检查构建产物。
+
+`layout.py` 保留节点与离线脚本的公共入口；文件校验、几何和 LLM 说明分别在 `layout_schema.py`、`geometry.py`、`instructions.py`。安装时复制完整节点目录，不能只复制 `layout.py`。前端只保留编辑和校验，不再维护另一套生图编译器。
+
+前后端共用 `tests/fixtures/layout-contract.json` 的接受／拒绝案例。提交钩子检查暂存内容：新源码最多 20 KB，历史超标文件可保持或缩小；生成资源、示例资产和锁文件不参与大小限制。
 
 
 版式文件互通与快捷操作见 [版式格式说明](docs/layout-format.md)。旧 Skill 输出与工作流快照继续兼容。

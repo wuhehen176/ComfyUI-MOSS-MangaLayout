@@ -30,6 +30,7 @@ export function portableLayout(value: LayoutRecord): LayoutRecord {
   if(!value || typeof value!=='object' || Array.isArray(value)) throw new Error('版式必须是对象。');
   const result={...value};
   const supplied=result.canvas;
+  if(supplied!==undefined && (!supplied || typeof supplied!=='object' || Array.isArray(supplied))) throw new Error('版式需要有效画布。');
   const direction=supplied ? (supplied.width>supplied.height ? 'landscape' : 'portrait') : result.portrait ? 'portrait' : 'landscape';
   const canvas=supplied ?? (direction==='portrait' ? {width:1088,height:1920} : {width:1920,height:1088});
   const panels=result.panels ?? result[direction];

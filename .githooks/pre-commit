@@ -1,0 +1,2 @@
+#!/bin/sh
+exec python -B scripts/check_file_sizes.py

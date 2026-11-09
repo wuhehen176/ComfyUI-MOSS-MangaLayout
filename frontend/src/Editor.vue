@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef } from 'vue';
 import ModalMask from '@/components/ModalMask.vue';
+import {useEditorHistory} from '@/manga/useEditorHistory';
+import {useFrameContent, type LayoutDocument} from '@/manga/useFrameContent';
 import { canvasOf, normalizeCanvas, orientationOf, parseCustomLayout, sharedDescription, slotType, type MangaCustomLayout, type ResolvedLayout, type ManualContent } from '@/manga/layouts';
 import { containsPoint, drawRect, nextSlot, textSlot, clamp, deformCorner, editablePanel, fitRect, MIN_PANEL, panelRect, quadPoints, saveEditedPanel, setSlotRect, slotRect, snapRect, type EditablePanel, type PanelRect } from '@/manga/editor';
 
@@ -8,7 +10,6 @@ import {regions,bounds,moveRegions,alignRegions,duplicateRegions,deleteRegions,s
 
 const props = defineProps<{ sources: (ResolvedLayout & { key: string })[]; existingIds: string[]; initialKey?: string; editingId?: string; initialMode?: 'llm' | 'manual' }>();
 const emit = defineEmits<{ close: []; save: [layout:MangaCustomLayout,keepOpen?:boolean,done?:()=>void] }>();
-interface LayoutDocument { metadata?:Record<string,any>; id: string; label: string; description: string; promptMode: 'llm' | 'manual'; useBboxCorners: boolean; omitFullPageFrame?:boolean; omitSmallFrames?:boolean; width: number; height: number; panels: EditablePanel[] }
 function unusedId(base: string): string {
   let id = base, suffix = 2;
   while (props.existingIds.includes(id)) id = `${base}_${suffix++}`;
@@ -151,21 +152,15 @@ const svg = ref<SVGSVGElement>();
 const canvasViewport = ref<HTMLDivElement>();
 const canvasZoom = ref(1);
 const canvasWidth = ref(1088), canvasHeight = ref(1920);
-const undoStack = ref<string[]>([]), redoStack = ref<string[]>([]);
-const baseline = ref('');
 const current = computed(() => doc.value.panels[selected.value]);
 const activeRect = computed(() => current.value ? selectedSlot.value && current.value.slots[selectedSlot.value] ? slotRect(current.value, selectedSlot.value) : current.value : null);
 const slotLabels: Record<string,string> = { C:'内区', S:'主体', T:'顶部文字', B:'底部文字', TL:'左上文字', TR:'右上文字', BL:'左下文字', BR:'右下文字', L:'左人物', R:'右人物', O:'道具/音效', ML:'左侧文字', MR:'右侧文字', E:'有限越线' };
 const newSlot = ref('S');
 const availableSlots = computed(() => current.value ? ['C','S','T','B','TL','TR','BL','BR','ML','MR','L','R','O'] : []);
 const slotToAdd = computed(() => availableSlots.value.includes(newSlot.value) ? newSlot.value : availableSlots.value[0] ?? '');
-const contentItems = computed(() => current.value?.slotContents?.[selectedSlot.value || 'F'] ?? []);
-const quickEdit = ref<{index: number; key: string} | null>(null);
-const quickDraft = ref('');
-const quickField = ref<HTMLTextAreaElement>();
 let slotSession: { before: string; undo: string[]; redo: string[] } | null = null;
 function confirmSlot(): void {
-  lastInput=null;
+  resetInputGroup();
   slotSession = null; selectedSlot.value = '';
 }
 function cancelSlot(): void {
@@ -228,7 +223,6 @@ function moveLayer(delta: number): void {
   [ordered[rank], ordered[to]] = [ordered[to], ordered[rank]];
   edit(() => { ordered.forEach(({rect},layer) => { rect.layer = layer; }); });
 }
-const snapshot = (): string => JSON.stringify(doc.value);
 const positions = computed(() => {
   const used = new Set(doc.value.panels.map(panel=>panel.position).filter(Boolean));
   return doc.value.panels.map((panel,index) => {
@@ -238,24 +232,14 @@ const positions = computed(() => {
     const name=`panel-${suffix}`; used.add(name); return name;
   });
 });
-function remember(before: string): void {
-  if (before === snapshot()) return;
-  undoStack.value.push(before);
-  if (undoStack.value.length > 100) undoStack.value.shift();
-  redoStack.value = [];
-  error.value = '';
-}
-function edit(action: () => void, slotEdit = false): void { if (!slotEdit) confirmSlot(); const before = snapshot(); action(); remember(before); }
-function restore(value: string): void {
-  doc.value = JSON.parse(value);
+const {undoStack,redoStack,baseline,snapshot,remember,edit,restore,undo,redo,inputEdit,resetInputGroup}=useEditorHistory(doc,error,confirmSlot,()=>{
   canvasWidth.value = doc.value.width; canvasHeight.value = doc.value.height;
   selected.value = Math.min(selected.value, doc.value.panels.length - 1);
   if (!current.value?.slots[selectedSlot.value]) selectedSlot.value = '';
   selection.value=regions(doc.value.panels,selection.value);
   error.value = ''; discard.value = false;
-}
-function undo(): void { confirmSlot(); const before = undoStack.value.pop(); if (before) { redoStack.value.push(snapshot()); restore(before); } }
-function redo(): void { confirmSlot(); const after = redoStack.value.pop(); if (after) { undoStack.value.push(snapshot()); restore(after); } }
+});
+const {contentItems,quickEdit,quickDraft,quickField,addContent,changeContent,removeContent,moveContent,frameDescription,setFrameDescription,changeSlotNote,openDescription,saveQuickDescription,previewDescription}=useFrameContent(doc,current,selected,selectedSlot,selectSlot,edit,inputEdit);
 function loadSource(): void {
   const source = props.sources.find(item => item.key === sourceKey.value);
   if (!source) return;
@@ -310,57 +294,6 @@ function changePromptMode(mode: 'llm' | 'manual'): void {
 function changeBboxCorners(event: Event): void {
   edit(() => { doc.value.useBboxCorners=(event.target as HTMLInputElement).checked; });
 }
-function addContent(): void {
-  if (!current.value) return;
-  const key=selectedSlot.value || 'F';
-  const label = ['T','B','TL','TR','BL','BR','ML','MR'].includes(slotType(key)) ? 'text' : ['S','L','R'].includes(slotType(key)) ? 'character' : 'object';
-  edit(() => { ((current.value!.slotContents ??= {})[key] ??= []).push({label,caption:'',...(label==='text'?{text:'',textType:'dialogue' as const}:{})}); },true);
-}
-function changeContent(index: number, key: keyof ManualContent, event: Event): void {
-  const value=(event.target as HTMLInputElement).value;
-  edit(() => { Object.assign(contentItems.value[index],{[key]:value}); },true);
-}
-function removeContent(index: number): void { edit(() => { contentItems.value.splice(index,1); },true); }
-function moveContent(index: number, delta: number): void {
-  const to=index+delta;
-  if (to<0 || to>=contentItems.value.length) return;
-  edit(() => { const [item]=contentItems.value.splice(index,1); contentItems.value.splice(to,0,item); },true);
-}
-function frameDescription(panel: EditablePanel, key: string): string {
-  return panel.slotNotes?.[key] ?? (panel.slotContents?.[key] ?? []).filter(item=>item.label!=='text' && item.caption.trim()).map(item=>item.caption).join('\n');
-}
-let lastInput:{key:string;time:number;after:string}|null=null;
-function inputEdit(key:string,action:()=>void):void {
-  const before=snapshot(),coalesce=lastInput?.key===key && before===lastInput.after && Date.now()-lastInput.time<750;
-  edit(action,true);
-  if(coalesce&&before!==snapshot())undoStack.value.pop();
-  lastInput={key,time:Date.now(),after:snapshot()};
-}
-function setFrameDescription(index: number, key: string, note: string): void {
-  const panel=doc.value.panels[index];
-  if (!panel) return;
-  inputEdit(`note:${index}:${key}`,() => {
-    const visuals=(panel.slotContents?.[key] ?? []).filter(item=>item.label!=='text');
-    if (visuals.length===1 && (!panel.slotNotes?.[key] || panel.slotNotes[key]===visuals[0].caption)) visuals[0].caption=note;
-    if (note) (panel.slotNotes ??= {})[key] = note;
-    else if (panel.slotNotes) delete panel.slotNotes[key];
-  });
-}
-function changeSlotNote(event: Event): void { setFrameDescription(selected.value,selectedSlot.value || 'F',(event.target as HTMLTextAreaElement).value); }
-function openDescription(index: number, key: string): void {
-  selectSlot(index,key==='F'?'':key);
-  quickEdit.value={index,key};quickDraft.value=frameDescription(doc.value.panels[index],key);
-  void nextTick(()=>quickField.value?.focus());
-}
-function saveQuickDescription(): void {
-  if (!quickEdit.value) return;
-  setFrameDescription(quickEdit.value.index,quickEdit.value.key,quickDraft.value);quickEdit.value=null;
-}
-function previewDescription(panel: EditablePanel, key: string): string {
-  const text=frameDescription(panel,key).replace(/\s+/g,' ').trim();
-  return text.length>80?text.slice(0,80)+'…':text;
-}
-
 let gestureBounds:DOMRect|null=null;
 let queuedPointer:PointerEvent|null=null,pointerFrame=0;
 function canvasMove(event:PointerEvent):void {if(!gesture&&!marqueeStart&&!drawing)return;queuedPointer=event;if(!pointerFrame)pointerFrame=requestAnimationFrame(()=>{pointerFrame=0;const event=queuedPointer;queuedPointer=null;if(event)move(event);});}
@@ -643,14 +576,4 @@ onMounted(() => {
   </ModalMask>
 </template>
 
-<style scoped>
-.frame-description{pointer-events:none}.frame-description div{background:#fffD;color:#20334e;line-height:1.3;padding:2px 4px;border-radius:3px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}.quick-mask{position:fixed;inset:0;background:#0006;z-index:10010;display:grid;place-items:center;padding:20px}.quick-dialog{width:min(560px,90vw);padding:18px;background:var(--bbi-surface,#fff);color:var(--bbi-ink,#222);border-radius:10px;box-shadow:0 12px 50px #0005}.quick-dialog textarea{width:100%;resize:vertical}
-.mode-switch{position:relative;display:flex;flex:none;border:1px solid #7d8b9e;border-radius:7px;padding:3px;isolation:isolate}.mode-switch button{flex:1;border:0;padding:7px 2px;font-size:11px;white-space:nowrap;background:transparent}.mode-thumb{position:absolute;z-index:-1;left:3px;top:3px;bottom:3px;width:calc(50% - 3px);background:#2675cf;border-radius:4px;transition:transform .18s}.mode-switch.manual .mode-thumb{transform:translateX(100%)}.mode-switch [aria-selected="true"]{color:#fff}.manual-content{display:flex;flex-direction:column;gap:9px}.content-card{border:1px solid #8885;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:7px}.content-card button{padding:4px;font-size:11px}.content-card textarea{width:100%}
-.slot-actions{grid-column:1/-1;padding:8px;border:1px solid #2675cf66;border-radius:6px}.slot-actions .hint{margin-bottom:0}
-.manga-designer{width:min(1140px,96vw);max-height:94vh;overflow:auto;background:var(--bbi-surface,#fff);color:var(--bbi-ink,#222);border-radius:12px;padding:18px;box-sizing:border-box;box-shadow:0 16px 64px #0005;outline:none;font-size:13px}
-header,footer,.canvas-controls,.inline{display:flex;gap:8px;align-items:center;flex-wrap:wrap}header{justify-content:space-between;font-size:17px;margin-bottom:14px}footer{justify-content:flex-end;margin-top:14px;border-top:1px solid #8884;padding-top:12px}.canvas-controls label{display:flex;align-items:center;gap:5px}.canvas-controls input{width:90px}.designer-body{display:grid;grid-template-columns:180px minmax(180px,1fr) 180px;gap:16px;margin-top:12px}.tools,.properties{display:flex;flex-direction:column;gap:9px}.tools label:not(.check),.properties label{display:flex;flex-direction:column;gap:5px}.check{display:flex;gap:5px;align-items:center}input,textarea,select{box-sizing:border-box;min-width:0;max-width:100%;padding:6px;border:1px solid #8886;border-radius:5px;color:inherit;background:transparent;font:inherit}button{border:1px solid #8886;border-radius:6px;background:transparent;color:inherit;padding:6px 9px;cursor:pointer;font:inherit}button:disabled{opacity:.4;cursor:default}button.active,button.primary{background:#2675cf;color:white}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,.layout-canvas:focus-visible{outline:2px solid #2675cf;outline-offset:2px}.hint{font-size:12px;line-height:1.6;opacity:.75;margin:7px 0}.canvas-area{background:#8881;border:1px solid #8884;padding:12px;display:flex;flex-direction:column;align-items:center;min-width:0}.canvas-viewport{width:100%;height:62vh;overflow:auto;overscroll-behavior:contain}.layout-canvas{display:block;margin:0 auto;max-width:none;height:auto;overflow:visible;touch-action:none;user-select:none;box-shadow:0 2px 10px #0003}.panel,.slot{cursor:move}.slot-list{display:flex;flex-wrap:wrap;gap:4px;max-height:145px;overflow:auto}.slot-list button{font-size:11px;padding:4px 5px}.panel text{pointer-events:none}.error{color:#b3261e}
-@media(max-width:760px){.designer-body{grid-template-columns:1fr}.tools{display:flex;flex-direction:row;flex-wrap:wrap}.tools>.hint{width:100%}.properties{display:grid;grid-template-columns:1fr 1fr}.properties>.hint{grid-column:1/-1}.canvas-viewport{height:58vh}.manga-designer{padding:12px}}
-.manga-designer{width:min(1600px,97vw);height:94vh;overflow:hidden;display:flex;flex-direction:column;padding:14px}header{flex:none;border-bottom:1px solid #8884;padding-bottom:10px}.canvas-controls{flex:none}.designer-body{flex:1;min-height:0;grid-template-columns:auto minmax(220px,1fr) auto}.tools,.properties{overflow:auto;min-height:0;padding:3px 7px 10px 2px;scrollbar-gutter:stable}.tools{width:210px;resize:horizontal;min-width:170px;max-width:360px}.properties{width:260px;resize:horizontal;min-width:210px;max-width:360px}.canvas-area{min-height:0;padding:8px;overflow:hidden}.canvas-viewport{height:auto;flex:1;min-height:100px}.canvas-toolbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:none;padding-top:8px}.canvas-toolbar span{white-space:nowrap}.designer-body.hide-objects{grid-template-columns:minmax(220px,1fr) auto}.designer-body.hide-properties{grid-template-columns:auto minmax(220px,1fr)}.designer-body.hide-objects.hide-properties{grid-template-columns:1fr}.tree-panel{padding:4px 0;border-bottom:1px solid #8883}.tree-panel>button{width:100%;text-align:left}.tree-slots{display:flex;flex-wrap:wrap;gap:3px;margin:5px 0 4px 12px}.tree-slots button{padding:3px 6px;font-size:11px}.object-tree summary{cursor:pointer;padding:8px 0;font-weight:600}.context-menu{position:fixed;z-index:10030;width:180px;padding:6px;display:flex;flex-direction:column;gap:4px;border:1px solid #8886;background:var(--bbi-surface,#fff);border-radius:8px;box-shadow:0 8px 30px #0005}.context-menu button{text-align:left}.manga-designer>footer{flex:none}.manga-designer>.hint{margin:3px 0}
-@media(max-width:900px){.designer-body{grid-template-columns:170px minmax(200px,1fr) 220px;gap:8px}.manga-designer{width:99vw}}@media(max-width:640px){.designer-body,.designer-body.hide-objects,.designer-body.hide-properties{display:flex;flex-direction:column;overflow:auto}.canvas-area{min-height:48vh;order:-1}.tools,.properties{overflow:visible;min-height:auto;flex:none;resize:none}.tools,.properties{width:100%;min-width:0;max-width:none}.canvas-viewport{min-height:36vh}}
-.layout-canvas.drawing,.layout-canvas.drawing :deep(*){cursor:crosshair!important}.context-menu{width:222px;max-height:calc(100vh - 16px);overflow:auto}.create-options{display:grid;grid-template-columns:1fr 1fr;gap:4px;border-block:1px solid #8884;padding:6px 0}.create-options small{grid-column:1/-1;padding:3px;opacity:.75}.hit-list summary{cursor:pointer;padding:6px 4px}.hit-list>div{max-height:150px;overflow:auto;display:flex;flex-direction:column;gap:3px}.draw-status{display:flex;gap:8px;align-items:center;padding:7px;color:#a8d2ff;flex-wrap:wrap}.draw-status button{padding:3px 7px}.draw-preview{pointer-events:none}
-</style>
+<style scoped src="./Editor.css"></style>

@@ -7,3 +7,4 @@ tests/runtime-comfy/
 *.log
 .env
 .env.*
+.check-tmp/

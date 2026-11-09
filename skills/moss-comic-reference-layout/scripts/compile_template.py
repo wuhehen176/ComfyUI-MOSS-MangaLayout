@@ -3,6 +3,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import sys
 
 
 def main():
@@ -16,8 +17,10 @@ def main():
     compiler = args.node_dir/'layout.py'
     if not compiler.is_file():
         parser.error(f'Node compiler not found: {compiler}')
-    spec = importlib.util.spec_from_file_location('moss_reference_compiler', compiler)
+    # Load the node as a package so its compiler can use sibling schema/geometry modules.
+    spec = importlib.util.spec_from_file_location('moss_reference_compiler', compiler, submodule_search_locations=[str(args.node_dir.resolve())])
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     layout = json.loads(args.layout.read_text(encoding='utf-8-sig'))
     prompt = args.prompt.read_text(encoding='utf-8-sig')

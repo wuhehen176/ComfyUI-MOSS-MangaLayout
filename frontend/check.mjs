@@ -6,5 +6,5 @@ const require=createRequire(process.env.MOSS_BUILD_DEPENDENCIES || new URL('./pa
 const {startVitest}=await import(pathToFileURL(require.resolve('vitest/node')).href);
 const {default:vue}=await import(pathToFileURL(require.resolve('@vitejs/plugin-vue')).href);
 const test=await startVitest('test',[],{root,config:false,watch:false,reporters:['dot'],pool:'forks',maxWorkers:2}, {plugins:[vue()],resolve:{alias:[{find:'vue/server-renderer',replacement:require.resolve('vue/server-renderer')},{find:'@',replacement:path.join(root,'src')},{find:'vue',replacement:require.resolve('vue/dist/vue.esm-bundler.js')},{find:'vitest',replacement:path.join(path.dirname(require.resolve('vitest/package.json')),'dist/index.js')}]}});
-process.exitCode=test?.state.getUnhandledErrors().length || test?.state.getFiles().some(file=>file.result?.state==='fail')?1:0;
+process.exitCode=!test || !test.state.getFiles().length || test.state.getUnhandledErrors().length || test.state.getFiles().some(file=>file.result?.state==='fail')?1:0;
 await test?.close();
